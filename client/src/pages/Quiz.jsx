@@ -1,8 +1,12 @@
 import React, { useEffect, useState } from "react";
+import { getUser } from "../utils/auth";
 
 const TOTAL_TIME = 30;
 
-const Quiz = ({ commissionerId }) => {
+const Quiz = ({ commissionerId: commissionerIdProp }) => {
+  // Get commissioner ID from prop or from auth user
+  const user = getUser();
+  const commissionerId = commissionerIdProp || user?.user_code || "";
   const [questions, setQuestions] = useState([]);
   const [originalQuestions, setOriginalQuestions] = useState([]); // Store original order for submission
   const [current, setCurrent] = useState(0);

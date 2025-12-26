@@ -1,20 +1,63 @@
-import CommissionerLogin from "./pages/CommissionerLogin";
+import React from "react";
+import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
+import Login from "./pages/Login";
 import Quiz from "./pages/Quiz";
 import AdminDashboard from "./pages/AdminDashboard";
-import { useState } from "react";
+import ProtectedRoute from "./components/ProtectedRoute";
+import { isLoggedIn } from "./utils/auth";
 
 function App() {
-  const [commissionerId, setCommissionerId] = useState(null);
-  const [showAdmin, setShowAdmin] = useState(false);
+  return (
+    <Router>
+      <Routes>
+        {/* Login Route */}
+        <Route
+          path="/login"
+          element={
+            isLoggedIn() ? (
+              <Navigate to="/" replace />
+            ) : (
+              <Login />
+            )
+          }
+        />
 
-  if (showAdmin) {
-    return <AdminDashboard onHome={() => setShowAdmin(false)} />;
-  }
+        {/* Quiz Route - Commissioner only */}
+        <Route
+          path="/quiz"
+          element={
+            <ProtectedRoute allowedRoles={["commissioner"]}>
+              <Quiz />
+            </ProtectedRoute>
+          }
+        />
 
-  return commissionerId ? (
-    <Quiz commissionerId={commissionerId} />
-  ) : (
-    <CommissionerLogin onLogin={setCommissionerId} onAdminClick={() => setShowAdmin(true)} />
+        {/* Admin Route - Admin and Engineer */}
+        <Route
+          path="/admin"
+          element={
+            <ProtectedRoute allowedRoles={["admin", "engineer"]}>
+              <AdminDashboard />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* Root Route - Redirect based on login status */}
+        <Route
+          path="/"
+          element={
+            isLoggedIn() ? (
+              <Navigate to="/quiz" replace />
+            ) : (
+              <Navigate to="/login" replace />
+            )
+          }
+        />
+
+        {/* Catch all - redirect to login */}
+        <Route path="*" element={<Navigate to="/login" replace />} />
+      </Routes>
+    </Router>
   );
 }
 

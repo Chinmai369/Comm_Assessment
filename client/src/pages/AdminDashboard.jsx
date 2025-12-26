@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 
 const AdminDashboard = ({ onHome }) => {
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [session, setSession] = useState(null);
   const [results, setResults] = useState([]);
@@ -149,7 +151,7 @@ const AdminDashboard = ({ onHome }) => {
     if (onHome) {
       onHome();
     } else {
-      window.location.href = "/";
+      navigate("/");
     }
   };
 

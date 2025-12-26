@@ -15,7 +15,7 @@ export const findUserForLogin = async ({ role, user_code, ulb_name }) => {
     query += ` AND ulb_name = $3`;
     params.push(ulb_name);
   }
-
+console.log("login query params:", params);
   const { rows } = await pool.query(query, params);
   return rows[0];
 };

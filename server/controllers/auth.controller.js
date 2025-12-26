@@ -1,7 +1,10 @@
 import jwt from "jsonwebtoken";
 import { findUserForLogin } from "../models/auth.model.js";
 
+
+
 export const login = async (req, res) => {
+  console.log ("LOGIN BODY RECIEVED:", req.body);
   const { role, user_code, ulb_name } = req.body;
 
   if (!role || !user_code) {
