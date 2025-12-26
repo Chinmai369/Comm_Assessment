@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect } from "react";
 import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
 import Login from "./pages/Login";
 import Quiz from "./pages/Quiz";
@@ -7,6 +7,24 @@ import ProtectedRoute from "./components/ProtectedRoute";
 import { isLoggedIn } from "./utils/auth";
 
 function App() {
+  useEffect(() => {
+    // Prevent back/forward button navigation
+    const preventNavigation = () => {
+      window.history.pushState(null, null, window.location.href);
+    };
+
+    // Push initial state
+    window.history.pushState(null, null, window.location.href);
+
+    // Listen for popstate (back/forward button clicks)
+    window.addEventListener('popstate', preventNavigation);
+
+    // Cleanup
+    return () => {
+      window.removeEventListener('popstate', preventNavigation);
+    };
+  }, []);
+
   return (
     <Router>
       <Routes>
