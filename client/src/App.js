@@ -10,48 +10,36 @@ function App() {
   return (
     <Router>
       <Routes>
-        {/* Login Route */}
+        {/* Login Route - Always show login page */}
         <Route
           path="/login"
-          element={
-            isLoggedIn() ? (
-              <Navigate to="/" replace />
-            ) : (
-              <Login />
-            )
-          }
+          element={<Login />}
         />
 
-        {/* Quiz Route - Commissioner only */}
+        {/* Quiz Route - Commissioner and Engineer */}
         <Route
           path="/quiz"
           element={
-            <ProtectedRoute allowedRoles={["commissioner"]}>
+            <ProtectedRoute allowedRoles={["commissioner", "engineer"]}>
               <Quiz />
             </ProtectedRoute>
           }
         />
 
-        {/* Admin Route - Admin and Engineer */}
+        {/* Admin Route - Admin only */}
         <Route
           path="/admin"
           element={
-            <ProtectedRoute allowedRoles={["admin", "engineer"]}>
+            <ProtectedRoute allowedRoles={["admin"]}>
               <AdminDashboard />
             </ProtectedRoute>
           }
         />
 
-        {/* Root Route - Redirect based on login status */}
+        {/* Root Route - Always redirect to login */}
         <Route
           path="/"
-          element={
-            isLoggedIn() ? (
-              <Navigate to="/quiz" replace />
-            ) : (
-              <Navigate to="/login" replace />
-            )
-          }
+          element={<Navigate to="/login" replace />}
         />
 
         {/* Catch all - redirect to login */}

@@ -63,9 +63,9 @@ const Login = () => {
         setAuth(response.token, response.user);
 
         // Redirect based on role
-        if (response.user.role === 'commissioner') {
+        if (response.user.role === 'commissioner' || response.user.role === 'engineer') {
           navigate('/quiz');
-        } else if (response.user.role === 'admin' || response.user.role === 'engineer') {
+        } else if (response.user.role === 'admin') {
           navigate('/admin');
         } else {
           navigate('/login');

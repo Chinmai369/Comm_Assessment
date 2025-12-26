@@ -1,9 +1,11 @@
 import React, { useEffect, useState } from "react";
-import { getUser } from "../utils/auth";
+import { useNavigate } from "react-router-dom";
+import { getUser, logout } from "../utils/auth";
 
 const TOTAL_TIME = 30;
 
 const Quiz = ({ commissionerId: commissionerIdProp }) => {
+  const navigate = useNavigate();
   // Get commissioner ID from prop or from auth user
   const user = getUser();
   const commissionerId = commissionerIdProp || user?.user_code || "";
@@ -68,13 +70,18 @@ const Quiz = ({ commissionerId: commissionerIdProp }) => {
       setError("Please select an option or skip");
       return;
     }
-    setShowAnswer(true);
-    setSubmitted(true);
+    // Move to next question immediately without showing answer
+    setError("");
+    setTimeLeft(TOTAL_TIME);
+
+    if (current + 1 < questions.length) {
+      setCurrent((prev) => prev + 1);
+    } else {
+      submitQuiz();
+    }
   };
 
   const moveNext = () => {
-    setShowAnswer(false);
-    setSubmitted(false);
     setError("");
     setTimeLeft(TOTAL_TIME);
 
@@ -117,6 +124,13 @@ const Quiz = ({ commissionerId: commissionerIdProp }) => {
     }));
   };
 
+  const handleLogout = () => {
+    if (window.confirm("Are you sure you want to logout? Your progress will be lost.")) {
+      logout();
+      navigate("/login");
+    }
+  };
+
   // Results Page
   if (result) {
     // Calculate skipped questions from the answers array
@@ -153,9 +167,20 @@ const Quiz = ({ commissionerId: commissionerIdProp }) => {
                   <h1 className="text-2xl font-bold text-gray-800">Assessment Complete</h1>
                 </div>
               </div>
-              <div className="text-right">
-                <p className="text-sm text-gray-600">Commissioner ID</p>
-                <p className="text-lg font-semibold text-gray-800">{commissionerId}</p>
+              <div className="text-right flex flex-col items-end gap-2">
+                <div>
+                  <p className="text-sm text-gray-600">Commissioner ID</p>
+                  <p className="text-lg font-semibold text-gray-800">{commissionerId}</p>
+                </div>
+                <button
+                  onClick={handleLogout}
+                  className="px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-semibold hover:bg-red-700 transition-colors flex items-center gap-2"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                  </svg>
+                  Logout
+                </button>
               </div>
             </div>
           </div>
@@ -320,9 +345,20 @@ const Quiz = ({ commissionerId: commissionerIdProp }) => {
                 ></div>
               </div>
             </div>
-            <div className="text-right">
-              <p className="text-sm text-gray-600">Question {current + 1} of {questions.length}</p>
-              <p className="text-2xl font-bold" style={{ color: '#66BB6A' }}>{timeLeft}s</p>
+            <div className="flex items-center gap-4">
+              <div className="text-right">
+                <p className="text-sm text-gray-600">Question {current + 1} of {questions.length}</p>
+                <p className="text-2xl font-bold" style={{ color: '#66BB6A' }}>{timeLeft}s</p>
+              </div>
+              <button
+                onClick={handleLogout}
+                className="px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-semibold hover:bg-red-700 transition-colors flex items-center gap-2"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                </svg>
+                Logout
+              </button>
             </div>
           </div>
         </div>
@@ -334,124 +370,40 @@ const Quiz = ({ commissionerId: commissionerIdProp }) => {
           <div className="space-y-3 mb-6">
             {["A", "B", "C", "D"].map((opt) => {
               const selected = answers[current] === opt;
-              // Handle both uppercase and lowercase correct_option
-              const correctOptionRaw = q.correct_option || "";
-              const correctOption = typeof correctOptionRaw === 'string' ? correctOptionRaw.toUpperCase() : "";
-              const isCorrect = opt === correctOption;
-              const isWrongSelected = selected && !isCorrect && showAnswer;
-              const showCorrect = showAnswer && isCorrect;
-              const showWrong = showAnswer && selected && !isCorrect;
-
-              let borderClass = "border-gray-200 hover:border-gray-300";
-              let bgClass = "";
-              let circleClass = "bg-gray-200 text-gray-700";
-              let textClass = "text-gray-800";
-
-              if (showAnswer) {
-                // Priority 1: Always highlight correct answer in green
-                if (isCorrect) {
-                  borderClass = "border-green-500";
-                  bgClass = "bg-green-50";
-                  circleClass = "bg-green-500 text-white";
-                  textClass = "text-gray-800";
-                } 
-                // Priority 2: Highlight wrong selected answer in red
-                else if (isWrongSelected) {
-                  borderClass = "border-red-500";
-                  bgClass = "bg-red-50";
-                  circleClass = "bg-red-500 text-white";
-                  textClass = "text-gray-800";
-                }
-                // Other unselected options remain gray
-                else {
-                  borderClass = "border-gray-200";
-                  bgClass = "";
-                  circleClass = "bg-gray-200 text-gray-700";
-                  textClass = "text-gray-800";
-                }
-              } else if (selected) {
-                // Before submission, selected option has green styling
-                borderClass = "border-green-500 bg-green-50";
-                circleClass = "bg-green-500 text-white";
-              }
 
               return (
                 <label
                   key={opt}
-                  className={`flex items-center p-4 border-2 rounded-lg transition-all ${
-                    showAnswer ? "cursor-default" : "cursor-pointer"
-                  } ${borderClass} ${bgClass}`}
+                  className={`flex items-center p-4 border-2 rounded-lg cursor-pointer transition-all ${
+                    selected 
+                      ? "border-green-500 bg-green-50" 
+                      : "border-gray-200 hover:border-gray-300"
+                  }`}
                 >
                   <div
-                    className={`w-8 h-8 rounded-full flex items-center justify-center mr-4 font-semibold ${circleClass}`}
+                    className={`w-8 h-8 rounded-full flex items-center justify-center mr-4 font-semibold ${
+                      selected 
+                        ? "bg-green-500 text-white" 
+                        : "bg-gray-200 text-gray-700"
+                    }`}
                   >
                     {opt}
                   </div>
-                  <span className={`${textClass} flex-1`}>{q[`option_${opt.toLowerCase()}`]}</span>
-                  {showCorrect && (
-                    <span className="ml-2 text-green-600 font-semibold text-sm">✓ Correct</span>
-                  )}
-                  {showWrong && (
-                    <span className="ml-2 text-red-600 font-semibold text-sm">✗ Wrong</span>
-                  )}
-                  {!showAnswer && (
-                    <input
-                      type="radio"
-                      name={`question-${current}`}
-                      className="sr-only"
-                      checked={selected}
-                      onChange={() => selectAnswer(opt)}
-                    />
-                  )}
+                  <span className="text-gray-800 flex-1">{q[`option_${opt.toLowerCase()}`]}</span>
+                  <input
+                    type="radio"
+                    name={`question-${current}`}
+                    className="sr-only"
+                    checked={selected}
+                    onChange={() => selectAnswer(opt)}
+                  />
                 </label>
               );
             })}
           </div>
 
-          {/* Feedback Message */}
-          {showAnswer && answers[current] && (
-            <div className={`mb-4 p-4 rounded-lg ${
-              answers[current] === (q.correct_option?.toUpperCase() || "")
-                ? "bg-green-50 border border-green-200"
-                : "bg-red-50 border border-red-200"
-            }`}>
-              {answers[current] === (q.correct_option?.toUpperCase() || "") ? (
-                <p className="text-green-700 font-semibold flex items-center gap-2">
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                  Correct! Well done.
-                </p>
-              ) : (
-                <div className="text-red-700 font-semibold">
-                  <div className="flex items-center gap-2 mb-2">
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                    <span>Incorrect.</span>
-                  </div>
-                  {q.correct_option ? (
-                    <div className="ml-7">
-                      <p className="font-semibold mb-2">The correct answer is:</p>
-                      <div className="bg-white p-4 rounded-lg border-2 border-green-500 shadow-sm">
-                        <p className="text-green-700 font-bold text-lg">
-                          <span className="inline-block w-8 h-8 rounded-full bg-green-500 text-white flex items-center justify-center mr-2 align-middle">
-                            {q.correct_option.toUpperCase()}
-                          </span>
-                          {q[`option_${q.correct_option.toLowerCase()}`] || q[`option_${q.correct_option.toUpperCase()}`] || 'Not available'}
-                        </p>
-                      </div>
-                    </div>
-                  ) : (
-                    <p className="ml-7 text-sm font-normal">Correct answer information is not available.</p>
-                  )}
-                </div>
-              )}
-            </div>
-          )}
-
           <div className="flex justify-center items-center gap-4">
-            {answers[current] && !showAnswer && (
+            {answers[current] && (
               <button
                 onClick={submitCurrent}
                 className="px-6 py-3 rounded-lg font-semibold text-white hover:opacity-90 transition-opacity"
@@ -460,23 +412,12 @@ const Quiz = ({ commissionerId: commissionerIdProp }) => {
                 Submit Answer
               </button>
             )}
-            {showAnswer && (
-              <button
-                onClick={moveNext}
-                className="px-6 py-3 rounded-lg font-semibold text-white hover:opacity-90 transition-opacity"
-                style={{ backgroundColor: '#4DB6AC' }}
-              >
-                Next Question
-              </button>
-            )}
-            {!showAnswer && (
-              <button
-                onClick={moveNext}
-                className="px-6 py-3 bg-gray-600 text-white rounded-lg font-semibold hover:bg-gray-700 transition-colors"
-              >
-                Skip Question
-              </button>
-            )}
+            <button
+              onClick={moveNext}
+              className="px-6 py-3 bg-gray-600 text-white rounded-lg font-semibold hover:bg-gray-700 transition-colors"
+            >
+              Skip Question
+            </button>
           </div>
 
           {error && <p className="text-red-600 mt-4 text-center">{error}</p>}

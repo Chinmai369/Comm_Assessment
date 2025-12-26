@@ -3,6 +3,10 @@ import ReactDOM from 'react-dom/client';
 import './index.css';
 import App from './App';
 import reportWebVitals from './reportWebVitals';
+import { logout } from './utils/auth';
+
+// Clear any existing authentication on app start to always show login page
+logout();
 
 const root = ReactDOM.createRoot(document.getElementById('root'));
 root.render(

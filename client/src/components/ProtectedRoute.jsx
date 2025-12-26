@@ -22,9 +22,9 @@ const ProtectedRoute = ({ children, allowedRoles = [] }) => {
   if (allowedRoles.length > 0 && !allowedRoles.includes(userRole)) {
     // User is logged in but doesn't have the required role
     // Redirect based on their role
-    if (userRole === 'commissioner') {
+    if (userRole === 'commissioner' || userRole === 'engineer') {
       return <Navigate to="/quiz" replace />;
-    } else if (userRole === 'admin' || userRole === 'engineer') {
+    } else if (userRole === 'admin') {
       return <Navigate to="/admin" replace />;
     }
     // Fallback to login if role is unknown
