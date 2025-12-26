@@ -1,10 +1,10 @@
+import pool from "../config/db.js";
 import { hasAlreadyAttempted } from "../models/result.model.js";
 import { saveResult } from "../models/result.model.js";
 import { getActiveSession } from "../models/session.model.js";
 
 import {
   getQuestionsBySession,
-  getCorrectAnswersBySession
 } from '../models/question.model.js';
 
 export const fetchQuestions = async (req, res) => {
@@ -40,54 +40,93 @@ export const fetchQuestions = async (req, res) => {
 
 export const submitQuiz = async (req, res) => {
   try {
-    const { commissioner_name, answers } = req.body;
+    const { answers = [] } = req.body;
+
+    console.log("SUBMIT QUIZ HIT");
+console.log("USER:", req.user);
+console.log("ANSWERS:", answers);
+
 
     const activeSession = await getActiveSession();
     if (!activeSession) {
       return res.status(400).json({
         success: false,
-        message: 'No active session found'
+        message: "No active session found",
       });
     }
-        const alreadyAttempted = await hasAlreadyAttempted(
-      commissioner_name,
+
+    const alreadyAttempted = await hasAlreadyAttempted(
+      req.user.user_code,
       activeSession.id
     );
 
     if (alreadyAttempted) {
       return res.status(400).json({
         success: false,
-        message: 'You have already attempted this session'
+        message: "You have already attempted this session",
       });
     }
 
-
-    const correctAnswers = await getCorrectAnswersBySession(activeSession.id);
+    const questions = await getQuestionsBySession(activeSession.id);
 
     let correct = 0;
-    correctAnswers.forEach((q, index) => {
-      if (answers[index] === q.correct_option) correct++;
-    });
+    let wrong = 0;
 
-    const wrong = correctAnswers.length - correct;
-    const percentage = (correct / correctAnswers.length) * 100;
+    for (let i = 0; i < questions.length; i++) {
+      const selectedOption = answers[i] || null;
+      const question = questions[i];
+
+      const isCorrect =
+        selectedOption &&
+        selectedOption === question.correct_option;
+
+      if (selectedOption) {
+        if (isCorrect) correct++;
+        else wrong++;
+      }
+
+      await pool.query(
+        `
+        INSERT INTO comm_answers
+          (user_code, role, session_id, question_id, selected_option, is_correct)
+        VALUES ($1,$2,$3,$4,$5,$6)
+        ON CONFLICT (user_code, session_id, question_id)
+        DO NOTHING
+        `,
+        [
+          req.user.user_code,
+          req.user.role,
+          activeSession.id,
+          question.id,
+          selectedOption,
+          isCorrect,
+        ]
+      );
+    }
+
+    const percentage = Math.round(
+      (correct / questions.length) * 100
+    );
 
     await saveResult({
-      commissioner_name,
+      commissioner_name: req.user.user_code,
       session_id: activeSession.id,
       correct,
       wrong,
-      percentage
+      percentage,
     });
 
     res.json({
       success: true,
-      session: activeSession.session_name,
       correct,
       wrong,
-      percentage
+      percentage,
     });
   } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    console.error("SUBMIT QUIZ ERROR:", error);
+    res.status(500).json({
+      success: false,
+      message: "Quiz submission failed",
+    });
   }
 };
