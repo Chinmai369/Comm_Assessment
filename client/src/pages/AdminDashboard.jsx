@@ -561,14 +561,13 @@ const AdminDashboard = ({ onHome }) => {
                                 <th className="text-left py-3 px-4 text-xs font-semibold text-gray-500 uppercase">ULB</th>
                                 <th className="text-left py-3 px-4 text-xs font-semibold text-gray-500 uppercase">STATUS</th>
                                 <th className="text-left py-3 px-4 text-xs font-semibold text-gray-500 uppercase">SELECTED ANSWER</th>
-                                <th className="text-left py-3 px-4 text-xs font-semibold text-gray-500 uppercase">TIME SPENT</th>
                                 <th className="text-left py-3 px-4 text-xs font-semibold text-gray-500 uppercase">RESULT</th>
                               </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-50">
                               {(!q.responses || q.responses.length === 0) ? (
                                 <tr>
-                                  <td colSpan="6" className="py-8 text-center text-gray-400 italic">No responses recorded for this question yet</td>
+                                  <td colSpan="5" className="py-8 text-center text-gray-400 italic">No responses recorded for this question yet</td>
                                 </tr>
                               ) : (
                                 q.responses.map((resp, ridx) => {
@@ -589,7 +588,6 @@ const AdminDashboard = ({ onHome }) => {
                                         </span>
                                       </td>
                                       <td className="py-4 px-4 text-gray-600">{selectedText}</td>
-                                      <td className="py-4 px-4 text-gray-400">-</td>
                                       <td className="py-4 px-4">
                                         {isSkipped ? (
                                           <span className="text-gray-400 italic">Not answered</span>
@@ -851,57 +849,76 @@ const AdminDashboard = ({ onHome }) => {
         {/* Questions Modal */}
         {showQuestionsModal && viewingSession && (
           <div
-            className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+            className="fixed inset-0 bg-slate-900/70 backdrop-blur-sm flex items-center justify-center z-50 p-4"
             onClick={closeQuestionsModal}
           >
             <div
-              className="bg-white rounded-2xl p-6 max-w-4xl w-full max-h-[90vh] overflow-y-auto"
+              className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl max-h-[90vh] flex flex-col overflow-hidden border border-slate-200"
               onClick={(e) => e.stopPropagation()}
             >
-              <div className="flex items-center justify-between mb-6 sticky top-0 bg-white pb-4 border-b">
-                <div>
-                  <h3 className="text-2xl font-bold text-gray-800">
-                    Questions for Session: {viewingSession.session_name}
-                  </h3>
-                  <p className="text-sm text-gray-500">Total Questions: {sessionQuestions.length}</p>
+              {/* Modal Header */}
+              <div className="px-8 py-5 border-b border-slate-100 flex items-center justify-between bg-white">
+                <div className="flex items-center gap-4">
+                  <div className="w-10 h-10 rounded-xl bg-indigo-600 flex items-center justify-center text-white shadow-lg shadow-indigo-100">
+                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
+                    </svg>
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-bold text-slate-800 tracking-tight">
+                      {viewingSession.session_name}
+                    </h3>
+                    <p className="text-xs font-semibold text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                      Assessment Content <span className="text-slate-200">•</span> {sessionQuestions.length} Questions
+                    </p>
+                  </div>
                 </div>
                 <button
                   onClick={closeQuestionsModal}
-                  className="text-gray-500 hover:text-gray-700 p-2"
+                  className="p-2 hover:bg-slate-50 rounded-lg transition-colors group"
                 >
-                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  <svg className="w-5 h-5 text-slate-400 group-hover:text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
                   </svg>
                 </button>
               </div>
 
-              {loadingQuestions ? (
-                <div className="py-20 text-center">
-                  <div className="inline-block animate-spin rounded-full h-10 w-10 border-b-2 border-purple-600 mb-4"></div>
-                  <p className="text-gray-500">Loading questions...</p>
-                </div>
-              ) : sessionQuestions.length === 0 ? (
-                <div className="py-20 text-center">
-                  <p className="text-gray-500 text-lg">No questions found for this session.</p>
-                </div>
-              ) : (
-                <div className="space-y-6">
-                  {sessionQuestions.map((q, index) => (
-                    <div key={q.id || index} className="bg-gray-50 rounded-xl p-6 border border-gray-100">
-                      {editingQuestionId === q.id ? (
-                        <form onSubmit={handleSaveQuestion} className="space-y-4">
-                          <div className="flex gap-4">
-                            <span className="flex-shrink-0 w-8 h-8 rounded-full bg-purple-600 text-white flex items-center justify-center font-bold">
-                              {index + 1}
-                            </span>
-                            <div className="flex-1 space-y-4">
+              {/* Modal Content */}
+              <div className="flex-1 overflow-y-auto bg-slate-50/50 p-8 custom-scrollbar">
+                {loadingQuestions ? (
+                  <div className="py-24 text-center">
+                    <div className="inline-block animate-spin rounded-full h-10 w-10 border-2 border-indigo-600 border-t-transparent mb-4"></div>
+                    <p className="text-slate-500 font-medium">Fetching session data...</p>
+                  </div>
+                ) : sessionQuestions.length === 0 ? (
+                  <div className="py-24 text-center">
+                    <div className="w-20 h-20 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                      <svg className="w-10 h-10 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
+                      </svg>
+                    </div>
+                    <p className="text-slate-500 text-lg font-medium">No questions found for this session.</p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 gap-6">
+                    {sessionQuestions.map((q, index) => (
+                      <div key={q.id || index} className="bg-white rounded-xl border border-slate-200 overflow-hidden transition-all hover:border-indigo-200 hover:shadow-sm">
+                        {editingQuestionId === q.id ? (
+                          <form onSubmit={handleSaveQuestion} className="p-6 space-y-6">
+                            <div className="flex items-center gap-3 mb-2">
+                              <span className="w-8 h-8 rounded-lg bg-indigo-600 text-white flex items-center justify-center font-bold text-sm">
+                                {index + 1}
+                              </span>
+                              <h4 className="font-bold text-slate-800">Edit Question</h4>
+                            </div>
+                            <div className="space-y-4">
                               <div>
-                                <label className="block text-sm font-semibold text-gray-700 mb-1">Question Text</label>
+                                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1.5 ml-1">Question Text</label>
                                 <textarea
                                   name="question"
                                   value={editFormData.question}
                                   onChange={handleEditFormChange}
-                                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 outline-none"
+                                  className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl focus:border-indigo-500 focus:bg-white outline-none transition-all font-medium text-slate-700 resize-none"
                                   rows="2"
                                   required
                                 />
@@ -909,26 +926,26 @@ const AdminDashboard = ({ onHome }) => {
                               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 {['a', 'b', 'c', 'd'].map((opt) => (
                                   <div key={opt}>
-                                    <label className="block text-sm font-semibold text-gray-700 mb-1">Option {opt.toUpperCase()}</label>
+                                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1.5 ml-1">Option {opt.toUpperCase()}</label>
                                     <input
                                       type="text"
                                       name={`option_${opt}`}
                                       value={editFormData[`option_${opt}`]}
                                       onChange={handleEditFormChange}
-                                      className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 outline-none"
+                                      className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg focus:border-indigo-500 focus:bg-white outline-none transition-all font-medium text-slate-700"
                                       required
                                     />
                                   </div>
                                 ))}
                               </div>
-                              <div className="flex items-center gap-4">
+                              <div className="flex items-center justify-between gap-6 pt-4 border-t border-slate-100">
                                 <div className="flex-1">
-                                  <label className="block text-sm font-semibold text-gray-700 mb-1">Correct Option</label>
+                                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1.5 ml-1">Correct Answer</label>
                                   <select
                                     name="correct_option"
                                     value={editFormData.correct_option}
                                     onChange={handleEditFormChange}
-                                    className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 outline-none"
+                                    className="w-full px-4 py-2.5 bg-indigo-50 border border-indigo-100 rounded-lg focus:border-indigo-500 outline-none transition-all font-bold text-indigo-700 cursor-pointer appearance-none"
                                     required
                                   >
                                     <option value="A">Option A</option>
@@ -937,86 +954,92 @@ const AdminDashboard = ({ onHome }) => {
                                     <option value="D">Option D</option>
                                   </select>
                                 </div>
-                                <div className="flex items-end gap-2">
-                                  <button
-                                    type="submit"
-                                    className="px-6 py-2 bg-green-600 text-white rounded-lg font-bold hover:bg-green-700 transition-colors"
-                                  >
-                                    Save
-                                  </button>
+                                <div className="flex items-center gap-2 pt-5">
                                   <button
                                     type="button"
                                     onClick={handleCancelEdit}
-                                    className="px-6 py-2 bg-gray-500 text-white rounded-lg font-bold hover:bg-gray-600 transition-colors"
+                                    className="px-5 py-2.5 text-slate-500 font-bold hover:text-slate-700 transition-colors text-sm"
                                   >
                                     Cancel
+                                  </button>
+                                  <button
+                                    type="submit"
+                                    className="px-8 py-2.5 bg-indigo-600 text-white rounded-lg font-bold shadow-lg shadow-indigo-100 hover:bg-indigo-700 transition-all text-sm"
+                                  >
+                                    Save Changes
                                   </button>
                                 </div>
                               </div>
                             </div>
-                          </div>
-                        </form>
-                      ) : (
-                        <div className="flex gap-4">
-                          <span className="flex-shrink-0 w-8 h-8 rounded-full bg-purple-100 text-purple-600 flex items-center justify-center font-bold">
-                            {index + 1}
-                          </span>
-                          <div className="flex-1">
-                            <div className="flex items-start justify-between mb-4">
-                              <h4 className="text-lg font-semibold text-gray-800 flex-1">{q.question}</h4>
+                          </form>
+                        ) : (
+                          <div className="p-6">
+                            <div className="flex items-start justify-between mb-6">
+                              <div className="flex gap-4">
+                                <span className="flex-shrink-0 w-8 h-8 rounded-lg bg-slate-100 text-slate-500 flex items-center justify-center font-bold text-sm">
+                                  {index + 1}
+                                </span>
+                                <h4 className="text-lg font-bold text-slate-800 leading-snug">
+                                  {q.question}
+                                </h4>
+                              </div>
                               <button
                                 onClick={() => handleEditQuestion(q)}
-                                className="ml-4 px-3 py-1 text-xs font-bold text-purple-600 border border-purple-600 rounded-md hover:bg-purple-600 hover:text-white transition-all"
+                                className="flex items-center gap-1.5 px-3 py-1.5 text-indigo-600 bg-indigo-50 hover:bg-indigo-100 rounded-lg text-[11px] font-black transition-all"
                               >
-                                Edit Question
+                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                                </svg>
+                                EDIT
                               </button>
                             </div>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
-                              {['a', 'b', 'c', 'd'].map((opt) => (
-                                <div 
-                                  key={opt}
-                                  className={`p-3 rounded-lg border flex items-center gap-3 ${
-                                    q.correct_option?.toLowerCase() === opt 
-                                      ? 'bg-green-50 border-green-200 text-green-800' 
-                                      : 'bg-white border-gray-200 text-gray-600'
-                                  }`}
-                                >
-                                  <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
-                                    q.correct_option?.toLowerCase() === opt 
-                                      ? 'bg-green-500 text-white' 
-                                      : 'bg-gray-100 text-gray-500'
-                                  }`}>
-                                    {opt.toUpperCase()}
-                                  </span>
-                                  <span>{q[`option_${opt}`]}</span>
-                                  {q.correct_option?.toLowerCase() === opt && (
-                                    <svg className="w-5 h-5 text-green-500 ml-auto" fill="currentColor" viewBox="0 0 20 20">
-                                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                                    </svg>
-                                  )}
-                                </div>
-                              ))}
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <span className="text-sm font-semibold text-gray-500">Correct Option:</span>
-                              <span className="px-2 py-1 bg-green-100 text-green-700 text-xs font-bold rounded uppercase">
-                                Option {q.correct_option}
-                              </span>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                              {['a', 'b', 'c', 'd'].map((opt) => {
+                                const isCorrect = q.correct_option?.toUpperCase() === opt.toUpperCase();
+                                return (
+                                  <div 
+                                    key={opt}
+                                    className={`px-4 py-3 rounded-lg border flex items-center gap-3 transition-all ${
+                                      isCorrect 
+                                        ? 'bg-emerald-50 border-emerald-200 text-emerald-900' 
+                                        : 'bg-slate-50 border-slate-100 text-slate-600'
+                                    }`}
+                                  >
+                                    <span className={`w-6 h-6 rounded flex items-center justify-center text-[10px] font-black ${
+                                      isCorrect 
+                                        ? 'bg-emerald-500 text-white' 
+                                        : 'bg-slate-200 text-slate-500'
+                                    }`}>
+                                      {opt.toUpperCase()}
+                                    </span>
+                                    <span className="font-semibold text-sm">{q[`option_${opt.toLowerCase()}`]}</span>
+                                    {isCorrect && (
+                                      <svg className="w-4 h-4 text-emerald-500 ml-auto" fill="currentColor" viewBox="0 0 20 20">
+                                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                                      </svg>
+                                    )}
+                                  </div>
+                                );
+                              })}
                             </div>
                           </div>
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              )}
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
 
-              <div className="mt-8 pt-6 border-t flex justify-end">
+              {/* Modal Footer */}
+              <div className="px-8 py-5 border-t border-slate-100 bg-white flex justify-between items-center">
+                <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">
+                  End of Session content
+                </p>
                 <button
                   onClick={closeQuestionsModal}
-                  className="px-8 py-3 bg-gray-800 text-white rounded-lg font-bold hover:bg-gray-900 transition-colors shadow-lg"
+                  className="px-8 py-2.5 bg-slate-800 text-white rounded-xl font-bold hover:bg-slate-950 transition-all text-sm shadow-lg shadow-slate-100"
                 >
-                  Close
+                  Close Modal
                 </button>
               </div>
             </div>
