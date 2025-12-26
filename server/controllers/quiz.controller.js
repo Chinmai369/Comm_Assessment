@@ -5,33 +5,47 @@ import { getActiveSession } from "../models/session.model.js";
 
 import {
   getQuestionsBySession,
+  updateQuestionById,
 } from '../models/question.model.js';
 
 export const fetchQuestions = async (req, res) => {
   try {
-    const activeSession = await getActiveSession();
+    const { sessionId } = req.query;
+    let targetSession;
 
-    if (!activeSession) {
+    if (sessionId) {
+      // If sessionId is provided, we can just use it, 
+      // but let's check if we want to return the session info too
+      const sessionResult = await pool.query(
+        "SELECT id, session_name FROM comm_sessions WHERE id = $1",
+        [sessionId]
+      );
+      targetSession = sessionResult.rows[0];
+    } else {
+      targetSession = await getActiveSession();
+    }
+
+    if (!targetSession) {
       return res.status(400).json({
         success: false,
-        message: 'No active session found'
+        message: sessionId ? 'Session not found' : 'No active session found'
       });
     }
 
-    const questions = await getQuestionsBySession(activeSession.id);
+    const questions = await getQuestionsBySession(targetSession.id);
 
     res.json({
       success: true,
-      session: activeSession,
+      session: targetSession,
       questions: questions.map(q => ({
-    id: q.id,
-    question: q.question,
-    option_a: q.option_a,
-    option_b: q.option_b,
-    option_c: q.option_c,
-    option_d: q.option_d,
-    correct_option: q.correct_option 
-}))
+        id: q.id,
+        question: q.question,
+        option_a: q.option_a,
+        option_b: q.option_b,
+        option_c: q.option_c,
+        option_d: q.option_d,
+        correct_option: q.correct_option 
+      }))
     });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -127,6 +141,40 @@ console.log("ANSWERS:", answers);
     res.status(500).json({
       success: false,
       message: "Quiz submission failed",
+    });
+  }
+};
+
+export const updateQuestion = async (req, res) => {
+  const { id } = req.params;
+  const { question, option_a, option_b, option_c, option_d, correct_option } = req.body;
+
+  try {
+    const updated = await updateQuestionById(id, {
+      question,
+      option_a,
+      option_b,
+      option_c,
+      option_d,
+      correct_option,
+    });
+
+    if (!updated) {
+      return res.status(404).json({
+        success: false,
+        message: "Question not found",
+      });
+    }
+
+    res.json({
+      success: true,
+      data: updated,
+    });
+  } catch (error) {
+    console.error("UPDATE QUESTION ERROR:", error);
+    res.status(500).json({
+      success: false,
+      message: error.message,
     });
   }
 };

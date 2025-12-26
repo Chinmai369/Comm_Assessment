@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { getUser, logout } from "../utils/auth";
+import { apiGet, apiPost } from "../utils/api";
 
 const TOTAL_TIME = 30;
 
@@ -31,8 +32,7 @@ const Quiz = ({ commissionerId: commissionerIdProp }) => {
   };
 
   useEffect(() => {
-    fetch("http://localhost:5000/api/quiz/questions")
-      .then((res) => res.json())
+    apiGet("/quiz/questions")
       .then((data) => {
         // Store original questions in ID order
         setOriginalQuestions(data.questions);
@@ -40,6 +40,10 @@ const Quiz = ({ commissionerId: commissionerIdProp }) => {
         const shuffledQuestions = shuffleArray(data.questions);
         setQuestions(shuffledQuestions);
         setAnswers(new Array(shuffledQuestions.length).fill(""));
+      })
+      .catch((err) => {
+        setError("Failed to load questions. Please try again.");
+        console.error("Error fetching questions:", err);
       });
   }, []);
 
@@ -102,18 +106,17 @@ const Quiz = ({ commissionerId: commissionerIdProp }) => {
     // Create answers array in original question order
     const orderedAnswers = originalQuestions.map(q => answersByQuestionId[q.id] || "");
 
-    fetch("http://localhost:5000/api/quiz/submit", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        commissioner_name: commissionerId,
-        answers: orderedAnswers,
-      }),
+    apiPost("/quiz/submit", {
+      commissioner_name: commissionerId,
+      answers: orderedAnswers,
     })
-      .then((res) => res.json())
       .then((data) => {
         if (!data.success) setError(data.message);
         else setResult(data);
+      })
+      .catch((err) => {
+        setError("Failed to submit quiz. Please try again.");
+        console.error("Error submitting quiz:", err);
       });
   };
 

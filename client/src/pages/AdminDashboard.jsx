@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { apiGet, apiPost, apiPut, apiRequest } from "../utils/api";
 
 const AdminDashboard = ({ onHome }) => {
   const navigate = useNavigate();
@@ -10,6 +11,12 @@ const AdminDashboard = ({ onHome }) => {
   const [activeTab, setActiveTab] = useState("overview");
   const [selectedCommissioner, setSelectedCommissioner] = useState(null);
   const [showModal, setShowModal] = useState(false);
+  const [showQuestionsModal, setShowQuestionsModal] = useState(false);
+  const [viewingSession, setViewingSession] = useState(null);
+  const [sessionQuestions, setSessionQuestions] = useState([]);
+  const [loadingQuestions, setLoadingQuestions] = useState(false);
+  const [editingQuestionId, setEditingQuestionId] = useState(null);
+  const [editFormData, setEditFormData] = useState({});
   const [refreshing, setRefreshing] = useState(false);
   
   // Session management state
@@ -21,12 +28,11 @@ const AdminDashboard = ({ onHome }) => {
 
   const fetchData = () => {
     setRefreshing(true);
-    fetch("http://localhost:5000/api/results")
-      .then((res) => res.json())
+    apiGet("/results")
       .then((data) => {
         if (data.success) {
           setSession(data.session);
-          setResults(data.results);
+          setResults(data.results || []);
         }
         setLoading(false);
         setRefreshing(false);
@@ -37,23 +43,54 @@ const AdminDashboard = ({ onHome }) => {
       });
   };
 
-  const fetchQuestions = () => {
-    fetch("http://localhost:5000/api/quiz/questions")
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.success) {
-          setQuestions(data.questions);
+  const fetchQuestions = (sessionId = null) => {
+    // First fetch full questions with options from quiz questions API
+    apiGet("/quiz/questions")
+      .then((quizData) => {
+        if (quizData.success) {
+          const fullQuestions = quizData.questions;
+
+          if (sessionId) {
+            // Then fetch analysis metrics and merge them
+            apiGet(`/results/question-analysis/${sessionId}`)
+              .then((analysisData) => {
+                if (analysisData.success) {
+                  const merged = fullQuestions.map((q) => {
+                    const metrics = analysisData.data.find(
+                      (m) => m.question_id === q.id
+                    );
+                    return {
+                      ...q,
+                      correct: metrics ? parseInt(metrics.correct_count) : 0,
+                      wrong: metrics ? parseInt(metrics.wrong_count) : 0,
+                      skipped: metrics ? parseInt(metrics.skipped_count) : 0,
+                      responses: metrics ? metrics.responses : []
+                    };
+                  });
+                  setQuestions(merged);
+                } else {
+                  setQuestions(fullQuestions);
+                }
+              })
+              .catch((err) => {
+                console.error("Error fetching analysis:", err);
+                setQuestions(fullQuestions);
+              });
+          } else {
+            setQuestions(fullQuestions);
+          }
         }
       })
-      .catch(() => {});
+      .catch((err) => {
+        console.error("Error fetching questions:", err);
+      });
   };
 
   const fetchSessions = async () => {
     try {
       setSessionsLoading(true);
       setSessionError("");
-      const response = await fetch("http://localhost:5000/api/sessions");
-      const data = await response.json();
+      const data = await apiGet("/sessions");
 
       if (data.success) {
         setSessions(data.data || []);
@@ -76,15 +113,7 @@ const AdminDashboard = ({ onHome }) => {
       setSessionError("");
       setSessionSuccess("");
 
-      const response = await fetch("http://localhost:5000/api/sessions/activate", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ session_id: sessionId }),
-      });
-
-      const data = await response.json();
+      const data = await apiPost("/sessions/activate", { session_id: sessionId });
 
       if (data.success) {
         setSessionSuccess("Session activated successfully!");
@@ -106,25 +135,25 @@ const AdminDashboard = ({ onHome }) => {
 
   useEffect(() => {
     fetchData();
-    fetchQuestions();
+    fetchQuestions(activeTab === "analysis" ? session?.id : null);
     fetchSessions();
     // Auto-refresh every 5 seconds
     const interval = setInterval(() => {
       fetchData();
       if (activeTab === "analysis") {
-        fetchQuestions();
+        fetchQuestions(session?.id);
       }
       if (activeTab === "sessions") {
         fetchSessions();
       }
     }, 5000);
     return () => clearInterval(interval);
-  }, [activeTab]);
+  }, [activeTab, session?.id]);
 
   const handleRefresh = () => {
     fetchData();
     if (activeTab === "analysis") {
-      fetchQuestions();
+      fetchQuestions(session?.id);
     }
     if (activeTab === "sessions") {
       fetchSessions();
@@ -142,9 +171,71 @@ const AdminDashboard = ({ onHome }) => {
     setShowModal(true);
   };
 
+  const handleViewQuestions = (sessionItem) => {
+    setViewingSession(sessionItem);
+    setLoadingQuestions(true);
+    setShowQuestionsModal(true);
+    
+    apiGet(`/quiz/questions?sessionId=${sessionItem.id}`)
+      .then((data) => {
+        if (data.success) {
+          setSessionQuestions(data.questions);
+        }
+        setLoadingQuestions(false);
+      })
+      .catch((err) => {
+        console.error("Error fetching session questions:", err);
+        setLoadingQuestions(false);
+      });
+  };
+
+  const handleEditQuestion = (q) => {
+    setEditingQuestionId(q.id);
+    setEditFormData({ ...q });
+  };
+
+  const handleCancelEdit = () => {
+    setEditingQuestionId(null);
+    setEditFormData({});
+  };
+
+  const handleSaveQuestion = async (e) => {
+    e.preventDefault();
+    try {
+      const data = await apiPut(`/quiz/questions/${editingQuestionId}`, editFormData);
+
+      if (data.success) {
+        // Update local state
+        setSessionQuestions(prev => prev.map(q => q.id === editingQuestionId ? data.data : q));
+        setEditingQuestionId(null);
+        setEditFormData({});
+        // Also refresh the analysis tab if it's active
+        if (activeTab === "analysis") {
+          fetchQuestions(session?.id);
+        }
+      } else {
+        alert(data.message || "Failed to update question");
+      }
+    } catch (err) {
+      console.error("Error saving question:", err);
+      alert("An error occurred while saving the question");
+    }
+  };
+
+  const handleEditFormChange = (e) => {
+    const { name, value } = e.target;
+    setEditFormData(prev => ({ ...prev, [name]: value }));
+  };
+
   const closeModal = () => {
     setShowModal(false);
     setSelectedCommissioner(null);
+  };
+
+  const closeQuestionsModal = () => {
+    setShowQuestionsModal(false);
+    setViewingSession(null);
+    setSessionQuestions([]);
   };
 
   const handleHome = () => {
@@ -168,16 +259,16 @@ const AdminDashboard = ({ onHome }) => {
   const completed = results.length; // All results are completed
   const inProgress = 0; // Would need backend support to track this
   const averageScore = results.length > 0
-    ? Math.round(results.reduce((sum, r) => sum + (r.score_percentage || 0), 0) / results.length)
+    ? Math.round(results.reduce((sum, r) => sum + (Number(r.score_percentage) || 0), 0) / results.length)
     : 0;
 
-  // Calculate answered and skipped (assuming 10 questions total)
-  const totalQuestions = 10;
+  // Calculate answered and skipped
+  const totalQuestionsCount = questions.length || 10;
   const calculateAnswered = (result) => {
     return (result.correct_answers || 0) + (result.wrong_answers || 0);
   };
   const calculateSkipped = (result) => {
-    return totalQuestions - calculateAnswered(result);
+    return totalQuestionsCount - calculateAnswered(result);
   };
 
   return (
@@ -348,20 +439,25 @@ const AdminDashboard = ({ onHome }) => {
                 <table className="w-full">
                   <thead>
                     <tr>
-                      <th className="text-left text-xs font-semibold text-gray-500 uppercase py-3 px-4">COMMISSIONER DETAILS</th>
-                      <th className="text-left text-xs font-semibold text-gray-500 uppercase py-3 px-4">STATUS</th>
-                      <th className="text-left text-xs font-semibold text-gray-500 uppercase py-3 px-4">LOGIN TIME</th>
-                      <th className="text-left text-xs font-semibold text-gray-500 uppercase py-3 px-4">SCORE</th>
-                      <th className="text-left text-xs font-semibold text-gray-500 uppercase py-3 px-4">ANSWERED</th>
-                      <th className="text-left text-xs font-semibold text-gray-500 uppercase py-3 px-4">SKIPPED</th>
-                      <th className="text-left text-xs font-semibold text-gray-500 uppercase py-3 px-4">DURATION</th>
-                      <th className="text-left text-xs font-semibold text-gray-500 uppercase py-3 px-4">ACTIONS</th>
+                      <th className="text-left text-xs font-semibold text-gray-500 uppercase py-3 px-4 whitespace-nowrap">COMMISSIONER DETAILS</th>
+                      <th className="text-left text-xs font-semibold text-gray-500 uppercase py-3 px-4 whitespace-nowrap">ULB NAME</th>
+                      <th className="text-left text-xs font-semibold text-gray-500 uppercase py-3 px-4 whitespace-nowrap">ROLE</th>
+                      <th className="text-left text-xs font-semibold text-gray-500 uppercase py-3 px-4 whitespace-nowrap">STATUS</th>
+                      <th className="text-left text-xs font-semibold text-gray-500 uppercase py-3 px-4 whitespace-nowrap">LOGIN TIME</th>
+                      <th className="text-left text-xs font-semibold text-gray-500 uppercase py-3 px-4 whitespace-nowrap">SESSION</th>
+                      <th className="text-left text-xs font-semibold text-gray-500 uppercase py-3 px-4 whitespace-nowrap">TOTAL Q.</th>
+                      <th className="text-left text-xs font-semibold text-gray-500 uppercase py-3 px-4 whitespace-nowrap">ANSWERED</th>
+                      <th className="text-left text-xs font-semibold text-gray-500 uppercase py-3 px-4 whitespace-nowrap">SKIPPED</th>
+                      <th className="text-left text-xs font-semibold text-gray-500 uppercase py-3 px-4 whitespace-nowrap">CORRECT</th>
+                      <th className="text-left text-xs font-semibold text-gray-500 uppercase py-3 px-4 whitespace-nowrap">SCORE</th>
+                      <th className="text-left text-xs font-semibold text-gray-500 uppercase py-3 px-4 whitespace-nowrap">AVG DURATION</th>
+                      <th className="text-left text-xs font-semibold text-gray-500 uppercase py-3 px-4 whitespace-nowrap">ACTIONS</th>
                     </tr>
                   </thead>
                   <tbody>
                     {results.length === 0 ? (
                       <tr>
-                        <td colSpan="8" className="py-12 text-center">
+                        <td colSpan="13" className="py-12 text-center">
                           <div className="flex flex-col items-center justify-center">
                             <svg className="w-16 h-16 text-gray-300 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
@@ -376,20 +472,25 @@ const AdminDashboard = ({ onHome }) => {
                         const skipped = calculateSkipped(r);
                         return (
                           <tr key={index} className="border-t border-gray-100 hover:bg-gray-50">
-                            <td className="py-4 px-4 text-gray-800 font-medium">{r.commissioner_name}</td>
-                            <td className="py-4 px-4">
+                            <td className="py-4 px-4 text-gray-800 font-medium whitespace-nowrap">{r.commissioner_name}</td>
+                            <td className="py-4 px-4 text-gray-600 text-sm whitespace-nowrap">{r.ulb_name}</td>
+                            <td className="py-4 px-4 text-gray-600 text-sm capitalize whitespace-nowrap">{r.role}</td>
+                            <td className="py-4 px-4 whitespace-nowrap">
                               <span className="px-3 py-1 rounded-full text-xs font-semibold" style={{ backgroundColor: '#E8F5E9', color: '#66BB6A' }}>
                                 Completed
                               </span>
                             </td>
-                            <td className="py-4 px-4 text-gray-600 text-sm">
+                            <td className="py-4 px-4 text-gray-600 text-sm whitespace-nowrap">
                               {new Date(r.attempted_at).toLocaleString()}
                             </td>
-                            <td className="py-4 px-4 text-gray-800 font-semibold">{r.score_percentage || 0}%</td>
-                            <td className="py-4 px-4 text-gray-600">{answered}</td>
-                            <td className="py-4 px-4 text-gray-600">{skipped}</td>
+                            <td className="py-4 px-4 text-gray-600 text-sm whitespace-nowrap">{r.session_name}</td>
+                            <td className="py-4 px-4 text-gray-600 text-sm">{totalQuestionsCount}</td>
+                            <td className="py-4 px-4 text-gray-600 text-sm">{answered}</td>
+                            <td className="py-4 px-4 text-gray-600 text-sm">{skipped}</td>
+                            <td className="py-4 px-4 text-gray-600 text-sm font-semibold text-green-600">{r.correct_answers}</td>
+                            <td className="py-4 px-4 text-gray-800 font-bold">{r.score_percentage || 0}%</td>
                             <td className="py-4 px-4 text-gray-600 text-sm">-</td>
-                            <td className="py-4 px-4">
+                            <td className="py-4 px-4 whitespace-nowrap">
                               <button
                                 onClick={() => handleView(r)}
                                 className="text-purple-600 hover:text-purple-800 text-sm font-semibold"
@@ -420,45 +521,100 @@ const AdminDashboard = ({ onHome }) => {
                   <p className="text-gray-500">No questions available</p>
                 </div>
               ) : (
-                <div className="space-y-4">
+                <div className="space-y-12">
                   {questions.map((q, index) => {
+                    const correctAnswerText = q[`option_${q.correct_option?.toLowerCase()}`];
                     return (
-                      <div key={q.id || index} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
-                        <div className="flex items-start justify-between mb-3">
-                          <div className="flex-1">
-                            <p className="font-semibold text-gray-800 mb-3">
-                              Question {index + 1}: {q.question}
-                            </p>
-                            <div className="grid grid-cols-2 gap-4 mt-3">
-                              <div className="space-y-2">
-                                <div className="flex items-center gap-2">
-                                  <span className="w-6 h-6 rounded-full bg-gray-200 flex items-center justify-center text-xs font-semibold text-gray-700">A</span>
-                                  <p className="text-sm text-gray-700">{q.option_a}</p>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                  <span className="w-6 h-6 rounded-full bg-gray-200 flex items-center justify-center text-xs font-semibold text-gray-700">B</span>
-                                  <p className="text-sm text-gray-700">{q.option_b}</p>
-                                </div>
-                              </div>
-                              <div className="space-y-2">
-                                <div className="flex items-center gap-2">
-                                  <span className="w-6 h-6 rounded-full bg-gray-200 flex items-center justify-center text-xs font-semibold text-gray-700">C</span>
-                                  <p className="text-sm text-gray-700">{q.option_c}</p>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                  <span className="w-6 h-6 rounded-full bg-gray-200 flex items-center justify-center text-xs font-semibold text-gray-700">D</span>
-                                  <p className="text-sm text-gray-700">{q.option_d}</p>
-                                </div>
-                              </div>
-                            </div>
-                            {q.correct_option && (
-                              <div className="mt-4 pt-3 border-t border-gray-200">
-                                <p className="text-sm font-semibold text-green-600">
-                                  Correct Answer: <span className="text-green-700">{q.correct_option.toUpperCase()}</span>
-                                </p>
-                              </div>
-                            )}
+                      <div key={q.id || index} className="pb-8 border-b border-gray-100 last:border-b-0">
+                        {/* Question Header */}
+                        <div className="mb-6">
+                          <h3 className="text-lg font-bold text-gray-800 mb-2">
+                            Question {index + 1}: {q.question}
+                          </h3>
+                          <p className="text-sm font-semibold text-green-600">
+                            Correct Answer: {correctAnswerText}
+                          </p>
+                        </div>
+
+                        {/* Summary Metrics */}
+                        <div className="grid grid-cols-3 gap-8 max-w-2xl mx-auto mb-8 text-center">
+                          <div>
+                            <p className="text-2xl font-bold text-green-600">{q.correct || 0}</p>
+                            <p className="text-xs text-gray-500 font-semibold uppercase tracking-wider">Correct</p>
                           </div>
+                          <div>
+                            <p className="text-2xl font-bold text-red-600">{q.wrong || 0}</p>
+                            <p className="text-xs text-gray-500 font-semibold uppercase tracking-wider">Incorrect</p>
+                          </div>
+                          <div>
+                            <p className="text-2xl font-bold text-orange-500">{q.skipped || 0}</p>
+                            <p className="text-xs text-gray-500 font-semibold uppercase tracking-wider">Skipped</p>
+                          </div>
+                        </div>
+
+                        {/* Detailed Responses Table */}
+                        <div className="overflow-x-auto border border-gray-100 rounded-xl">
+                          <table className="w-full text-sm">
+                            <thead className="bg-gray-50 border-b border-gray-100">
+                              <tr>
+                                <th className="text-left py-3 px-4 text-xs font-semibold text-gray-500 uppercase">COMMISSIONER</th>
+                                <th className="text-left py-3 px-4 text-xs font-semibold text-gray-500 uppercase">ULB</th>
+                                <th className="text-left py-3 px-4 text-xs font-semibold text-gray-500 uppercase">STATUS</th>
+                                <th className="text-left py-3 px-4 text-xs font-semibold text-gray-500 uppercase">SELECTED ANSWER</th>
+                                <th className="text-left py-3 px-4 text-xs font-semibold text-gray-500 uppercase">TIME SPENT</th>
+                                <th className="text-left py-3 px-4 text-xs font-semibold text-gray-500 uppercase">RESULT</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-50">
+                              {(!q.responses || q.responses.length === 0) ? (
+                                <tr>
+                                  <td colSpan="6" className="py-8 text-center text-gray-400 italic">No responses recorded for this question yet</td>
+                                </tr>
+                              ) : (
+                                q.responses.map((resp, ridx) => {
+                                  const selectedText = resp.selected_option ? q[`option_${resp.selected_option.toLowerCase()}`] : "-";
+                                  const isSkipped = resp.status === 'skipped';
+                                  
+                                  return (
+                                    <tr key={ridx} className="hover:bg-gray-50 transition-colors">
+                                      <td className="py-4 px-4 font-medium text-gray-800">{resp.commissioner_name}</td>
+                                      <td className="py-4 px-4 text-gray-600">{resp.ulb_name}</td>
+                                      <td className="py-4 px-4">
+                                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
+                                          isSkipped 
+                                            ? 'bg-orange-50 text-orange-600 border border-orange-100' 
+                                            : 'bg-blue-50 text-blue-600 border border-blue-100'
+                                        }`}>
+                                          {resp.status}
+                                        </span>
+                                      </td>
+                                      <td className="py-4 px-4 text-gray-600">{selectedText}</td>
+                                      <td className="py-4 px-4 text-gray-400">-</td>
+                                      <td className="py-4 px-4">
+                                        {isSkipped ? (
+                                          <span className="text-gray-400 italic">Not answered</span>
+                                        ) : resp.is_correct ? (
+                                          <span className="flex items-center gap-1.5 text-green-600 font-bold">
+                                            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                                              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                                            </svg>
+                                            Correct
+                                          </span>
+                                        ) : (
+                                          <span className="flex items-center gap-1.5 text-red-600 font-bold">
+                                            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                                              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                                            </svg>
+                                            Incorrect
+                                          </span>
+                                        )}
+                                      </td>
+                                    </tr>
+                                  );
+                                })
+                              )}
+                            </tbody>
+                          </table>
                         </div>
                       </div>
                     );
@@ -537,7 +693,7 @@ const AdminDashboard = ({ onHome }) => {
                         <tr>
                           <th className="text-left text-xs font-semibold text-gray-500 uppercase py-3 px-4">SESSION NAME</th>
                           <th className="text-left text-xs font-semibold text-gray-500 uppercase py-3 px-4">STATUS</th>
-                          <th className="text-left text-xs font-semibold text-gray-500 uppercase py-3 px-4">ACTION</th>
+                          <th className="text-left text-xs font-semibold text-gray-500 uppercase py-3 px-4">ACTIONS</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -575,33 +731,41 @@ const AdminDashboard = ({ onHome }) => {
                                 )}
                               </td>
                               <td className="py-4 px-4">
-                                {isActive ? (
+                                <div className="flex items-center gap-2">
+                                  {isActive ? (
+                                    <button
+                                      disabled
+                                      className="px-4 py-2 rounded-lg text-sm font-semibold text-gray-400 bg-gray-100 cursor-not-allowed"
+                                    >
+                                      Active
+                                    </button>
+                                  ) : (
+                                    <button
+                                      onClick={() => handleActivateSession(sessionItem.id)}
+                                      disabled={isActivating || activatingId !== null}
+                                      className="px-4 py-2 rounded-lg text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-opacity"
+                                      style={{ backgroundColor: '#9C27B0' }}
+                                    >
+                                      {isActivating ? (
+                                        <span className="flex items-center gap-2">
+                                          <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                          </svg>
+                                          Activating...
+                                        </span>
+                                      ) : (
+                                        "Activate"
+                                      )}
+                                    </button>
+                                  )}
                                   <button
-                                    disabled
-                                    className="px-4 py-2 rounded-lg text-sm font-semibold text-gray-400 bg-gray-100 cursor-not-allowed"
+                                    onClick={() => handleViewQuestions(sessionItem)}
+                                    className="px-4 py-2 rounded-lg text-sm font-semibold text-purple-600 border border-purple-600 hover:bg-purple-50 transition-colors"
                                   >
-                                    Active
+                                    View Questions
                                   </button>
-                                ) : (
-                                  <button
-                                    onClick={() => handleActivateSession(sessionItem.id)}
-                                    disabled={isActivating || activatingId !== null}
-                                    className="px-4 py-2 rounded-lg text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-opacity"
-                                    style={{ backgroundColor: '#9C27B0' }}
-                                  >
-                                    {isActivating ? (
-                                      <span className="flex items-center gap-2">
-                                        <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
-                                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                                        </svg>
-                                        Activating...
-                                      </span>
-                                    ) : (
-                                      "Activate"
-                                    )}
-                                  </button>
-                                )}
+                                </div>
                               </td>
                             </tr>
                           );
@@ -676,6 +840,181 @@ const AdminDashboard = ({ onHome }) => {
                 <button
                   onClick={closeModal}
                   className="px-6 py-2 bg-gray-700 text-white rounded-lg font-semibold hover:bg-gray-800"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Questions Modal */}
+        {showQuestionsModal && viewingSession && (
+          <div
+            className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+            onClick={closeQuestionsModal}
+          >
+            <div
+              className="bg-white rounded-2xl p-6 max-w-4xl w-full max-h-[90vh] overflow-y-auto"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between mb-6 sticky top-0 bg-white pb-4 border-b">
+                <div>
+                  <h3 className="text-2xl font-bold text-gray-800">
+                    Questions for Session: {viewingSession.session_name}
+                  </h3>
+                  <p className="text-sm text-gray-500">Total Questions: {sessionQuestions.length}</p>
+                </div>
+                <button
+                  onClick={closeQuestionsModal}
+                  className="text-gray-500 hover:text-gray-700 p-2"
+                >
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+
+              {loadingQuestions ? (
+                <div className="py-20 text-center">
+                  <div className="inline-block animate-spin rounded-full h-10 w-10 border-b-2 border-purple-600 mb-4"></div>
+                  <p className="text-gray-500">Loading questions...</p>
+                </div>
+              ) : sessionQuestions.length === 0 ? (
+                <div className="py-20 text-center">
+                  <p className="text-gray-500 text-lg">No questions found for this session.</p>
+                </div>
+              ) : (
+                <div className="space-y-6">
+                  {sessionQuestions.map((q, index) => (
+                    <div key={q.id || index} className="bg-gray-50 rounded-xl p-6 border border-gray-100">
+                      {editingQuestionId === q.id ? (
+                        <form onSubmit={handleSaveQuestion} className="space-y-4">
+                          <div className="flex gap-4">
+                            <span className="flex-shrink-0 w-8 h-8 rounded-full bg-purple-600 text-white flex items-center justify-center font-bold">
+                              {index + 1}
+                            </span>
+                            <div className="flex-1 space-y-4">
+                              <div>
+                                <label className="block text-sm font-semibold text-gray-700 mb-1">Question Text</label>
+                                <textarea
+                                  name="question"
+                                  value={editFormData.question}
+                                  onChange={handleEditFormChange}
+                                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 outline-none"
+                                  rows="2"
+                                  required
+                                />
+                              </div>
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                {['a', 'b', 'c', 'd'].map((opt) => (
+                                  <div key={opt}>
+                                    <label className="block text-sm font-semibold text-gray-700 mb-1">Option {opt.toUpperCase()}</label>
+                                    <input
+                                      type="text"
+                                      name={`option_${opt}`}
+                                      value={editFormData[`option_${opt}`]}
+                                      onChange={handleEditFormChange}
+                                      className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 outline-none"
+                                      required
+                                    />
+                                  </div>
+                                ))}
+                              </div>
+                              <div className="flex items-center gap-4">
+                                <div className="flex-1">
+                                  <label className="block text-sm font-semibold text-gray-700 mb-1">Correct Option</label>
+                                  <select
+                                    name="correct_option"
+                                    value={editFormData.correct_option}
+                                    onChange={handleEditFormChange}
+                                    className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 outline-none"
+                                    required
+                                  >
+                                    <option value="A">Option A</option>
+                                    <option value="B">Option B</option>
+                                    <option value="C">Option C</option>
+                                    <option value="D">Option D</option>
+                                  </select>
+                                </div>
+                                <div className="flex items-end gap-2">
+                                  <button
+                                    type="submit"
+                                    className="px-6 py-2 bg-green-600 text-white rounded-lg font-bold hover:bg-green-700 transition-colors"
+                                  >
+                                    Save
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={handleCancelEdit}
+                                    className="px-6 py-2 bg-gray-500 text-white rounded-lg font-bold hover:bg-gray-600 transition-colors"
+                                  >
+                                    Cancel
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </form>
+                      ) : (
+                        <div className="flex gap-4">
+                          <span className="flex-shrink-0 w-8 h-8 rounded-full bg-purple-100 text-purple-600 flex items-center justify-center font-bold">
+                            {index + 1}
+                          </span>
+                          <div className="flex-1">
+                            <div className="flex items-start justify-between mb-4">
+                              <h4 className="text-lg font-semibold text-gray-800 flex-1">{q.question}</h4>
+                              <button
+                                onClick={() => handleEditQuestion(q)}
+                                className="ml-4 px-3 py-1 text-xs font-bold text-purple-600 border border-purple-600 rounded-md hover:bg-purple-600 hover:text-white transition-all"
+                              >
+                                Edit Question
+                              </button>
+                            </div>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
+                              {['a', 'b', 'c', 'd'].map((opt) => (
+                                <div 
+                                  key={opt}
+                                  className={`p-3 rounded-lg border flex items-center gap-3 ${
+                                    q.correct_option?.toLowerCase() === opt 
+                                      ? 'bg-green-50 border-green-200 text-green-800' 
+                                      : 'bg-white border-gray-200 text-gray-600'
+                                  }`}
+                                >
+                                  <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
+                                    q.correct_option?.toLowerCase() === opt 
+                                      ? 'bg-green-500 text-white' 
+                                      : 'bg-gray-100 text-gray-500'
+                                  }`}>
+                                    {opt.toUpperCase()}
+                                  </span>
+                                  <span>{q[`option_${opt}`]}</span>
+                                  {q.correct_option?.toLowerCase() === opt && (
+                                    <svg className="w-5 h-5 text-green-500 ml-auto" fill="currentColor" viewBox="0 0 20 20">
+                                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                                    </svg>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm font-semibold text-gray-500">Correct Option:</span>
+                              <span className="px-2 py-1 bg-green-100 text-green-700 text-xs font-bold rounded uppercase">
+                                Option {q.correct_option}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <div className="mt-8 pt-6 border-t flex justify-end">
+                <button
+                  onClick={closeQuestionsModal}
+                  className="px-8 py-3 bg-gray-800 text-white rounded-lg font-bold hover:bg-gray-900 transition-colors shadow-lg"
                 >
                   Close
                 </button>

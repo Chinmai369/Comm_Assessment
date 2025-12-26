@@ -34,14 +34,19 @@ export const hasAlreadyAttempted = async (commissioner_name, session_id) => {
 export const getResultsBySession = async (sessionId) => {
   const result = await pool.query(
     `SELECT
-        commissioner_name,
-        correct_answers,
-        wrong_answers,
-        score_percentage,
-        attempted_at
-     FROM comm_results
-     WHERE session_id = $1
-     ORDER BY attempted_at DESC`,
+        r.commissioner_name,
+        u.role,
+        u.ulb_name,
+        r.correct_answers,
+        r.wrong_answers,
+        r.score_percentage,
+        r.attempted_at,
+        s.session_name
+     FROM comm_results r
+     LEFT JOIN comm_users u ON r.commissioner_name = u.user_code
+     LEFT JOIN comm_sessions s ON r.session_id = s.id
+     WHERE r.session_id = $1
+     ORDER BY r.attempted_at DESC`,
     [sessionId]
   );
 

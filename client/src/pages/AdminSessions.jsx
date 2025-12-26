@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { apiGet, apiPost } from "../utils/api";
 
 const AdminSessions = () => {
   const [sessions, setSessions] = useState([]);
@@ -11,8 +12,7 @@ const AdminSessions = () => {
     try {
       setLoading(true);
       setError("");
-      const response = await fetch("http://localhost:5000/api/sessions");
-      const data = await response.json();
+      const data = await apiGet("/sessions");
 
       if (data.success) {
         setSessions(data.data || []);
@@ -39,15 +39,7 @@ const AdminSessions = () => {
       setError("");
       setSuccess("");
 
-      const response = await fetch("http://localhost:5000/api/sessions/activate", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ session_id: sessionId }),
-      });
-
-      const data = await response.json();
+      const data = await apiPost("/sessions/activate", { session_id: sessionId });
 
       if (data.success) {
         setSuccess("Session activated successfully!");
