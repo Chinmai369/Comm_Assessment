@@ -574,12 +574,69 @@ const AdminDashboard = ({ onHome }) => {
 
         {/* Tab Content */}
         {activeTab === "overview" && (
-          /* Commissioner Activity */
-          <div className="bg-white rounded-2xl p-6 shadow-lg">
-            <div className="mb-4">
-              <h2 className="text-2xl font-bold text-gray-800 mb-1">Commissioner Activity</h2>
-              <p className="text-sm text-gray-500">Real-time tracking of assessment participation</p>
-            </div>
+          <>
+            {/* Active Session Display */}
+            {sessions.find(s => s.is_active === true) ? (
+              <div className="bg-gradient-to-r from-green-50 to-emerald-50 rounded-2xl p-6 shadow-lg mb-4 border-2 border-green-200">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-4">
+                    <div className="w-16 h-16 rounded-xl flex items-center justify-center shadow-md" style={{ backgroundColor: '#66BB6A' }}>
+                      <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                    </div>
+                    <div>
+                      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Currently Active Session</p>
+                      <h2 className="text-3xl font-bold text-gray-800 mb-1">
+                        {sessions.find(s => s.is_active === true)?.session_name}
+                      </h2>
+                      <p className="text-sm text-gray-600">
+                        Session ID: <span className="font-semibold">{sessions.find(s => s.is_active === true)?.id}</span>
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex flex-col items-end gap-2">
+                    <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-white shadow-sm border border-green-200">
+                      <div className="w-3 h-3 rounded-full bg-green-500 animate-pulse"></div>
+                      <span className="text-sm font-bold text-green-700 uppercase tracking-wide">Active</span>
+                    </div>
+                    <div className="text-xs text-gray-500 font-medium">
+                      Live Assessment
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="bg-gradient-to-r from-gray-50 to-slate-50 rounded-2xl p-6 shadow-lg mb-4 border-2 border-gray-200">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-4">
+                    <div className="w-16 h-16 rounded-xl flex items-center justify-center shadow-md bg-gray-300">
+                      <svg className="w-8 h-8 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                    </div>
+                    <div>
+                      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Active Session</p>
+                      <h2 className="text-3xl font-bold text-gray-400 mb-1">No Active Session</h2>
+                      <p className="text-sm text-gray-500">
+                        Please activate a session to begin assessments
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-white shadow-sm border border-gray-200">
+                    <div className="w-3 h-3 rounded-full bg-gray-400"></div>
+                    <span className="text-sm font-bold text-gray-600 uppercase tracking-wide">Inactive</span>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Commissioner Activity */}
+            <div className="bg-white rounded-2xl p-6 shadow-lg">
+              <div className="mb-4">
+                <h2 className="text-2xl font-bold text-gray-800 mb-1">Commissioner Activity</h2>
+                <p className="text-sm text-gray-500">Real-time tracking of assessment participation</p>
+              </div>
             <div className="border-t border-gray-200 pt-4">
               <div className="overflow-x-auto">
                 <table className="w-full">
@@ -651,6 +708,7 @@ const AdminDashboard = ({ onHome }) => {
               </div>
             </div>
           </div>
+          </>
         )}
 
         {activeTab === "analysis" && (
