@@ -107,8 +107,8 @@ const Login = () => {
             </div>
           </div>
           
-          <p className="text-xs uppercase tracking-wide text-gray-600 mb-1">MUNICIPAL</p>
-          <h1 className="text-3xl font-bold text-gray-800 mb-1">Municipal Commission</h1>
+          <p className="text-xs uppercase tracking-wide text-gray-600 mb-1">Commissioner & Director of Municipal Administration</p>
+          <h1 className="text-3xl font-bold text-gray-800 mb-1">Municipal Commissioner</h1>
           <p className="text-base text-gray-600">Commissioner Assessment Portal</p>
         </div>
 
