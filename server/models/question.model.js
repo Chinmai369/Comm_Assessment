@@ -28,3 +28,33 @@ export const updateQuestionById = async (id, { question, option_a, option_b, opt
   );
   return result.rows[0];
 };
+
+
+export const addQuestion = async ({
+  session_id,
+  question,
+  option_a,
+  option_b,
+  option_c,
+  option_d,
+  correct_option
+}) => {
+  const query = `
+    INSERT INTO comm_questions
+      (session_id, question, option_a, option_b, option_c, option_d, correct_option)
+    VALUES ($1,$2,$3,$4,$5,$6,$7)
+    RETURNING *
+  `;
+
+  const { rows } = await pool.query(query, [
+    session_id,
+    question,
+    option_a,
+    option_b,
+    option_c,
+    option_d,
+    correct_option
+  ]);
+
+  return rows[0];
+};

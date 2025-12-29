@@ -26,6 +26,28 @@ const AdminDashboard = ({ onHome }) => {
   const [sessionError, setSessionError] = useState("");
   const [sessionSuccess, setSessionSuccess] = useState("");
   const [activatingId, setActivatingId] = useState(null);
+  
+  // Add Session state
+  const [newSessionName, setNewSessionName] = useState("");
+  const [addingSession, setAddingSession] = useState(false);
+  
+  // Add Question state
+  const [showAddQuestionModal, setShowAddQuestionModal] = useState(false);
+  const [selectedSessionForQuestion, setSelectedSessionForQuestion] = useState(null);
+  const [questionFormData, setQuestionFormData] = useState({
+    question: "",
+    option_a: "",
+    option_b: "",
+    option_c: "",
+    option_d: "",
+    correct_option: "A"
+  });
+  const [addingQuestion, setAddingQuestion] = useState(false);
+  
+  // Question Analysis per session state
+  const [sessionAnalysis, setSessionAnalysis] = useState({});
+  const [loadingAnalysis, setLoadingAnalysis] = useState({});
+  const [expandedSessions, setExpandedSessions] = useState({});
 
   const fetchData = () => {
     setRefreshing(true);
@@ -114,7 +136,7 @@ const AdminDashboard = ({ onHome }) => {
       setSessionError("");
       setSessionSuccess("");
 
-      const data = await apiPost("/sessions/activate", { session_id: sessionId });
+      const data = await apiPut(`/sessions/${sessionId}/activate`, {});
 
       if (data.success) {
         setSessionSuccess("Session activated successfully!");
@@ -134,11 +156,130 @@ const AdminDashboard = ({ onHome }) => {
     }
   };
 
+  const handleAddSession = async (e) => {
+    e.preventDefault();
+    if (!newSessionName.trim()) {
+      setSessionError("Session name is required");
+      return;
+    }
+
+    try {
+      setAddingSession(true);
+      setSessionError("");
+      setSessionSuccess("");
+
+      const data = await apiPost("/sessions", { session_name: newSessionName.trim() });
+
+      if (data.success) {
+        setSessionSuccess("Session added successfully!");
+        setNewSessionName("");
+        await fetchSessions();
+        setTimeout(() => setSessionSuccess(""), 3000);
+      } else {
+        setSessionError(data.message || "Failed to add session");
+      }
+    } catch (err) {
+      setSessionError("Error adding session. Please try again.");
+      console.error("Add session error:", err);
+    } finally {
+      setAddingSession(false);
+    }
+  };
+
+  const handleOpenAddQuestion = (sessionItem) => {
+    setSelectedSessionForQuestion(sessionItem);
+    setQuestionFormData({
+      question: "",
+      option_a: "",
+      option_b: "",
+      option_c: "",
+      option_d: "",
+      correct_option: "A"
+    });
+    setShowAddQuestionModal(true);
+  };
+
+  const handleCloseAddQuestion = () => {
+    setShowAddQuestionModal(false);
+    setSelectedSessionForQuestion(null);
+    setQuestionFormData({
+      question: "",
+      option_a: "",
+      option_b: "",
+      option_c: "",
+      option_d: "",
+      correct_option: "A"
+    });
+  };
+
+  const handleAddQuestion = async (e) => {
+    e.preventDefault();
+    if (!selectedSessionForQuestion) return;
+
+    try {
+      setAddingQuestion(true);
+      setSessionError("");
+      setSessionSuccess("");
+
+      const data = await apiPost("/quiz/questions", {
+        session_id: selectedSessionForQuestion.id,
+        question: questionFormData.question,
+        option_a: questionFormData.option_a,
+        option_b: questionFormData.option_b,
+        option_c: questionFormData.option_c,
+        option_d: questionFormData.option_d,
+        correct_option: questionFormData.correct_option
+      });
+
+      if (data.success) {
+        setSessionSuccess("Question added successfully!");
+        handleCloseAddQuestion();
+        // Refresh questions for the session if viewing
+        if (viewingSession && viewingSession.id === selectedSessionForQuestion.id) {
+          handleViewQuestions(selectedSessionForQuestion);
+        }
+        setTimeout(() => setSessionSuccess(""), 3000);
+      } else {
+        setSessionError(data.message || "Failed to add question");
+      }
+    } catch (err) {
+      setSessionError("Error adding question. Please try again.");
+      console.error("Add question error:", err);
+    } finally {
+      setAddingQuestion(false);
+    }
+  };
+
+  const handleQuestionFormChange = (e) => {
+    const { name, value } = e.target;
+    setQuestionFormData(prev => ({ ...prev, [name]: value }));
+  };
+
+  const handleToggleSessionAnalysis = async (sessionId) => {
+    const isExpanded = expandedSessions[sessionId];
+    setExpandedSessions(prev => ({ ...prev, [sessionId]: !isExpanded }));
+
+    // Fetch analysis if not already loaded
+    if (!isExpanded && !sessionAnalysis[sessionId]) {
+      try {
+        setLoadingAnalysis(prev => ({ ...prev, [sessionId]: true }));
+        const data = await apiGet(`/results/question-analysis/${sessionId}`);
+        if (data.success) {
+          setSessionAnalysis(prev => ({ ...prev, [sessionId]: data.data }));
+        }
+      } catch (err) {
+        console.error("Error fetching session analysis:", err);
+      } finally {
+        setLoadingAnalysis(prev => ({ ...prev, [sessionId]: false }));
+      }
+    }
+  };
+
   useEffect(() => {
     fetchData();
     fetchQuestions(activeTab === "analysis" ? session?.id : null);
     fetchSessions();
-    // Auto-refresh every 5 seconds
+    // Auto-refresh every 1 minute
     const interval = setInterval(() => {
       fetchData();
       if (activeTab === "analysis") {
@@ -147,7 +288,7 @@ const AdminDashboard = ({ onHome }) => {
       if (activeTab === "sessions") {
         fetchSessions();
       }
-    }, 5000);
+    }, 60000);
     return () => clearInterval(interval);
   }, [activeTab, session?.id]);
 
@@ -161,11 +302,6 @@ const AdminDashboard = ({ onHome }) => {
     }
   };
 
-  const handleClearData = () => {
-    if (window.confirm("Are you sure you want to clear all data? This action cannot be undone.")) {
-      alert("Clear Data functionality requires backend implementation. Please contact the administrator.");
-    }
-  };
 
   const handleView = (result) => {
     setSelectedCommissioner(result);
@@ -317,17 +453,6 @@ const AdminDashboard = ({ onHome }) => {
                 <span className="sm:hidden">Refresh</span>
               </button>
               <button
-                onClick={handleClearData}
-                className="px-3 md:px-4 py-2 rounded-lg text-white font-semibold flex items-center justify-center gap-2 text-xs md:text-sm"
-                style={{ backgroundColor: '#F44336' }}
-              >
-                <svg className="w-4 h-4 md:w-5 md:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                </svg>
-                <span className="hidden sm:inline">Clear Data</span>
-                <span className="sm:hidden">Clear</span>
-              </button>
-              <button
                 onClick={handleHome}
                 className="px-3 md:px-4 py-2 rounded-lg text-white font-semibold flex items-center justify-center gap-2 bg-gray-700 hover:bg-gray-800 text-xs md:text-sm"
               >
@@ -471,14 +596,13 @@ const AdminDashboard = ({ onHome }) => {
                       <th className="text-left text-xs font-semibold text-gray-500 uppercase py-3 px-4 whitespace-nowrap">SKIPPED</th>
                       <th className="text-left text-xs font-semibold text-gray-500 uppercase py-3 px-4 whitespace-nowrap">CORRECT</th>
                       <th className="text-left text-xs font-semibold text-gray-500 uppercase py-3 px-4 whitespace-nowrap">SCORE</th>
-                      <th className="text-left text-xs font-semibold text-gray-500 uppercase py-3 px-4 whitespace-nowrap">AVG DURATION</th>
                       <th className="text-left text-xs font-semibold text-gray-500 uppercase py-3 px-4 whitespace-nowrap">ACTIONS</th>
                     </tr>
                   </thead>
                   <tbody>
                     {results.length === 0 ? (
                       <tr>
-                        <td colSpan="13" className="py-12 text-center">
+                        <td colSpan="12" className="py-12 text-center">
                           <div className="flex flex-col items-center justify-center">
                             <svg className="w-16 h-16 text-gray-300 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
@@ -510,7 +634,6 @@ const AdminDashboard = ({ onHome }) => {
                             <td className="py-4 px-4 text-gray-600 text-sm">{skipped}</td>
                             <td className="py-4 px-4 text-gray-600 text-sm font-semibold text-green-600">{r.correct_answers}</td>
                             <td className="py-4 px-4 text-gray-800 font-bold">{r.score_percentage || 0}%</td>
-                            <td className="py-4 px-4 text-gray-600 text-sm">-</td>
                             <td className="py-4 px-4 whitespace-nowrap">
                               <button
                                 onClick={() => handleView(r)}
@@ -686,6 +809,42 @@ const AdminDashboard = ({ onHome }) => {
               </div>
             )}
 
+            {/* Add Session Form */}
+            <div className="bg-white rounded-2xl p-6 shadow-lg mb-4">
+              <div className="mb-4">
+                <h2 className="text-xl font-bold text-gray-800 mb-1">Add Session</h2>
+                <p className="text-sm text-gray-500">Create a new assessment session</p>
+              </div>
+              <form onSubmit={handleAddSession} className="flex gap-3">
+                <input
+                  type="text"
+                  value={newSessionName}
+                  onChange={(e) => setNewSessionName(e.target.value)}
+                  placeholder="Enter session name"
+                  className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                  disabled={addingSession}
+                />
+                <button
+                  type="submit"
+                  disabled={addingSession || !newSessionName.trim()}
+                  className="px-6 py-2 rounded-lg text-white font-semibold disabled:opacity-50 disabled:cursor-not-allowed transition-opacity"
+                  style={{ backgroundColor: '#9C27B0' }}
+                >
+                  {addingSession ? (
+                    <span className="flex items-center gap-2">
+                      <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                      Adding...
+                    </span>
+                  ) : (
+                    "Add Session"
+                  )}
+                </button>
+              </form>
+            </div>
+
             {/* Sessions Table */}
             <div className="bg-white rounded-2xl p-6 shadow-lg">
               <div className="mb-4">
@@ -719,74 +878,134 @@ const AdminDashboard = ({ onHome }) => {
                         {sessions.map((sessionItem) => {
                           const isActive = sessionItem.is_active === true;
                           const isActivating = activatingId === sessionItem.id;
+                          const isExpanded = expandedSessions[sessionItem.id];
+                          const analysis = sessionAnalysis[sessionItem.id];
+                          const isLoadingAnalysis = loadingAnalysis[sessionItem.id];
 
                           return (
-                            <tr
-                              key={sessionItem.id}
-                              className={`border-t border-gray-100 hover:bg-gray-50 ${
-                                isActive ? "bg-green-50" : ""
-                              }`}
-                            >
-                              <td className="py-4 px-4">
-                                <p className="font-semibold text-gray-800">{sessionItem.session_name}</p>
-                                <p className="text-xs text-gray-500">ID: {sessionItem.id}</p>
-                              </td>
-                              <td className="py-4 px-4">
-                                {isActive ? (
-                                  <span
-                                    className="px-3 py-1 rounded-full text-xs font-semibold inline-flex items-center gap-1"
-                                    style={{ backgroundColor: '#E8F5E9', color: '#66BB6A' }}
-                                  >
-                                    <div className="w-2 h-2 rounded-full bg-green-500"></div>
-                                    ACTIVE
-                                  </span>
-                                ) : (
-                                  <span
-                                    className="px-3 py-1 rounded-full text-xs font-semibold"
-                                    style={{ backgroundColor: '#F5F5F5', color: '#757575' }}
-                                  >
-                                    INACTIVE
-                                  </span>
-                                )}
-                              </td>
-                              <td className="py-4 px-4">
-                                <div className="flex items-center gap-2">
+                            <React.Fragment key={sessionItem.id}>
+                              <tr
+                                className={`border-t border-gray-100 hover:bg-gray-50 ${
+                                  isActive ? "bg-green-50" : ""
+                                }`}
+                              >
+                                <td className="py-4 px-4">
+                                  <p className="font-semibold text-gray-800">{sessionItem.session_name}</p>
+                                  <p className="text-xs text-gray-500">ID: {sessionItem.id}</p>
+                                </td>
+                                <td className="py-4 px-4">
                                   {isActive ? (
-                                    <button
-                                      disabled
-                                      className="px-4 py-2 rounded-lg text-sm font-semibold text-gray-400 bg-gray-100 cursor-not-allowed"
+                                    <span
+                                      className="px-3 py-1 rounded-full text-xs font-semibold inline-flex items-center gap-1"
+                                      style={{ backgroundColor: '#E8F5E9', color: '#66BB6A' }}
                                     >
-                                      Active
-                                    </button>
+                                      <div className="w-2 h-2 rounded-full bg-green-500"></div>
+                                      ACTIVE
+                                    </span>
                                   ) : (
-                                    <button
-                                      onClick={() => handleActivateSession(sessionItem.id)}
-                                      disabled={isActivating || activatingId !== null}
-                                      className="px-4 py-2 rounded-lg text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-opacity"
-                                      style={{ backgroundColor: '#9C27B0' }}
+                                    <span
+                                      className="px-3 py-1 rounded-full text-xs font-semibold"
+                                      style={{ backgroundColor: '#F5F5F5', color: '#757575' }}
                                     >
-                                      {isActivating ? (
-                                        <span className="flex items-center gap-2">
-                                          <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
-                                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                                          </svg>
-                                          Activating...
-                                        </span>
-                                      ) : (
-                                        "Activate"
-                                      )}
-                                    </button>
+                                      INACTIVE
+                                    </span>
                                   )}
-                                  <button
-                                    onClick={() => handleViewQuestions(sessionItem)}
-                                    className="px-4 py-2 rounded-lg text-sm font-semibold text-purple-600 border border-purple-600 hover:bg-purple-50 transition-colors"
-                                  >
-                                    View Questions
-                                  </button>
-                                </div>
-                              </td>
-                            </tr>
+                                </td>
+                                <td className="py-4 px-4">
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    {isActive ? (
+                                      <button
+                                        disabled
+                                        className="px-4 py-2 rounded-lg text-sm font-semibold text-gray-400 bg-gray-100 cursor-not-allowed"
+                                      >
+                                        Active
+                                      </button>
+                                    ) : (
+                                      <button
+                                        onClick={() => handleActivateSession(sessionItem.id)}
+                                        disabled={isActivating || activatingId !== null}
+                                        className="px-4 py-2 rounded-lg text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-opacity"
+                                        style={{ backgroundColor: '#9C27B0' }}
+                                      >
+                                        {isActivating ? (
+                                          <span className="flex items-center gap-2">
+                                            <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                            </svg>
+                                            Activating...
+                                          </span>
+                                        ) : (
+                                          "Activate"
+                                        )}
+                                      </button>
+                                    )}
+                                    <button
+                                      onClick={() => handleViewQuestions(sessionItem)}
+                                      className="px-4 py-2 rounded-lg text-sm font-semibold text-purple-600 border border-purple-600 hover:bg-purple-50 transition-colors"
+                                    >
+                                      View Questions
+                                    </button>
+                                    <button
+                                      onClick={() => handleOpenAddQuestion(sessionItem)}
+                                      className="px-4 py-2 rounded-lg text-sm font-semibold text-blue-600 border border-blue-600 hover:bg-blue-50 transition-colors"
+                                    >
+                                      Add Question
+                                    </button>
+                                    <button
+                                      onClick={() => handleToggleSessionAnalysis(sessionItem.id)}
+                                      className="px-4 py-2 rounded-lg text-sm font-semibold text-green-600 border border-green-600 hover:bg-green-50 transition-colors"
+                                    >
+                                      {isExpanded ? "Hide Analysis" : "Show Analysis"}
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                              {isExpanded && (
+                                <tr>
+                                  <td colSpan="3" className="px-4 py-4 bg-gray-50">
+                                    <div className="bg-white rounded-lg p-4 border border-gray-200">
+                                      <h3 className="text-lg font-bold text-gray-800 mb-4">Question Analysis</h3>
+                                      {isLoadingAnalysis ? (
+                                        <div className="py-8 text-center">
+                                          <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600 mb-4"></div>
+                                          <p className="text-gray-500">Loading analysis...</p>
+                                        </div>
+                                      ) : analysis && analysis.length > 0 ? (
+                                        <div className="space-y-4">
+                                          {analysis.map((item, idx) => (
+                                            <div key={idx} className="border border-gray-200 rounded-lg p-4">
+                                              <div className="grid grid-cols-4 gap-4 mb-3">
+                                                <div>
+                                                  <p className="text-xs text-gray-500 uppercase font-semibold mb-1">Question ID</p>
+                                                  <p className="text-sm font-bold text-gray-800">{item.question_id}</p>
+                                                </div>
+                                                <div>
+                                                  <p className="text-xs text-gray-500 uppercase font-semibold mb-1">Correct</p>
+                                                  <p className="text-sm font-bold text-green-600">{item.correct_count || 0}</p>
+                                                </div>
+                                                <div>
+                                                  <p className="text-xs text-gray-500 uppercase font-semibold mb-1">Wrong</p>
+                                                  <p className="text-sm font-bold text-red-600">{item.wrong_count || 0}</p>
+                                                </div>
+                                                <div>
+                                                  <p className="text-xs text-gray-500 uppercase font-semibold mb-1">Skipped</p>
+                                                  <p className="text-sm font-bold text-orange-600">{item.skipped_count || 0}</p>
+                                                </div>
+                                              </div>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      ) : (
+                                        <div className="py-8 text-center">
+                                          <p className="text-gray-500">No analysis data available for this session</p>
+                                        </div>
+                                      )}
+                                    </div>
+                                  </td>
+                                </tr>
+                              )}
+                            </React.Fragment>
                           );
                         })}
                       </tbody>
@@ -1067,11 +1286,147 @@ const AdminDashboard = ({ onHome }) => {
           </div>
         )}
 
+        {/* Add Question Modal */}
+        {showAddQuestionModal && selectedSessionForQuestion && (
+          <div
+            className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+            onClick={handleCloseAddQuestion}
+          >
+            <div
+              className="bg-white rounded-2xl p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h3 className="text-2xl font-bold text-gray-800">Add Question</h3>
+                  <p className="text-sm text-gray-500 mt-1">Session: {selectedSessionForQuestion.session_name}</p>
+                </div>
+                <button
+                  onClick={handleCloseAddQuestion}
+                  className="text-gray-500 hover:text-gray-700"
+                >
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+              <form onSubmit={handleAddQuestion} className="space-y-4">
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">Question</label>
+                  <textarea
+                    name="question"
+                    value={questionFormData.question}
+                    onChange={handleQuestionFormChange}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                    rows="3"
+                    required
+                    disabled={addingQuestion}
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">Option A</label>
+                    <input
+                      type="text"
+                      name="option_a"
+                      value={questionFormData.option_a}
+                      onChange={handleQuestionFormChange}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                      required
+                      disabled={addingQuestion}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">Option B</label>
+                    <input
+                      type="text"
+                      name="option_b"
+                      value={questionFormData.option_b}
+                      onChange={handleQuestionFormChange}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                      required
+                      disabled={addingQuestion}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">Option C</label>
+                    <input
+                      type="text"
+                      name="option_c"
+                      value={questionFormData.option_c}
+                      onChange={handleQuestionFormChange}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                      required
+                      disabled={addingQuestion}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">Option D</label>
+                    <input
+                      type="text"
+                      name="option_d"
+                      value={questionFormData.option_d}
+                      onChange={handleQuestionFormChange}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                      required
+                      disabled={addingQuestion}
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">Correct Answer</label>
+                  <select
+                    name="correct_option"
+                    value={questionFormData.correct_option}
+                    onChange={handleQuestionFormChange}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                    required
+                    disabled={addingQuestion}
+                  >
+                    <option value="A">Option A</option>
+                    <option value="B">Option B</option>
+                    <option value="C">Option C</option>
+                    <option value="D">Option D</option>
+                  </select>
+                </div>
+                <div className="flex justify-end gap-3 pt-4">
+                  <button
+                    type="button"
+                    onClick={handleCloseAddQuestion}
+                    className="px-6 py-2 bg-gray-200 text-gray-700 rounded-lg font-semibold hover:bg-gray-300 transition-colors"
+                    disabled={addingQuestion}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-6 py-2 rounded-lg text-white font-semibold hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-opacity"
+                    style={{ backgroundColor: '#9C27B0' }}
+                    disabled={addingQuestion}
+                  >
+                    {addingQuestion ? (
+                      <span className="flex items-center gap-2">
+                        <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        Adding...
+                      </span>
+                    ) : (
+                      "Add Question"
+                    )}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
         {/* Auto-refresh indicator */}
         <div className="mt-4 text-center">
           <div className="inline-flex items-center gap-2 text-sm text-gray-600">
             <div className="w-2 h-2 rounded-full bg-green-500"></div>
-            <span>Auto-refreshing every 5 seconds</span>
+            <span>Auto-refreshing every 1 minute</span>
           </div>
         </div>
       </div>
