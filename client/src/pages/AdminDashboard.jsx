@@ -31,6 +31,13 @@ const AdminDashboard = ({ onHome }) => {
   const [newSessionName, setNewSessionName] = useState("");
   const [addingSession, setAddingSession] = useState(false);
   
+  // Clone Session state
+  const [showCloneModal, setShowCloneModal] = useState(false);
+  const [selectedSessionsForClone, setSelectedSessionsForClone] = useState([]);
+  const [cloneSessionName, setCloneSessionName] = useState("");
+  const [cloneQuestionCount, setCloneQuestionCount] = useState("");
+  const [cloningSession, setCloningSession] = useState(false);
+  
   // Add Question state
   const [showAddQuestionModal, setShowAddQuestionModal] = useState(false);
   const [selectedSessionForQuestion, setSelectedSessionForQuestion] = useState(null);
@@ -48,6 +55,13 @@ const AdminDashboard = ({ onHome }) => {
   const [sessionAnalysis, setSessionAnalysis] = useState({});
   const [loadingAnalysis, setLoadingAnalysis] = useState({});
   const [expandedSessions, setExpandedSessions] = useState({});
+  
+  // Question counts per session
+  const [sessionQuestionCounts, setSessionQuestionCounts] = useState({});
+  const [loadingQuestionCounts, setLoadingQuestionCounts] = useState({});
+  
+  // Question Analysis filter state (per question ID)
+  const [questionFilters, setQuestionFilters] = useState({});
 
   const fetchData = () => {
     setRefreshing(true);
@@ -116,7 +130,13 @@ const AdminDashboard = ({ onHome }) => {
       const data = await apiGet("/sessions");
 
       if (data.success) {
-        setSessions(data.data || []);
+        const sessionsList = data.data || [];
+        setSessions(sessionsList);
+        
+        // Fetch question counts for all sessions
+        sessionsList.forEach((sessionItem) => {
+          fetchQuestionCount(sessionItem.id);
+        });
       } else {
         setSessionError("Failed to fetch sessions");
       }
@@ -125,6 +145,26 @@ const AdminDashboard = ({ onHome }) => {
       console.error("Fetch sessions error:", err);
     } finally {
       setSessionsLoading(false);
+    }
+  };
+
+  const fetchQuestionCount = async (sessionId) => {
+    // Skip if already loaded
+    if (sessionQuestionCounts[sessionId] !== undefined) return;
+    
+    try {
+      setLoadingQuestionCounts(prev => ({ ...prev, [sessionId]: true }));
+      const data = await apiGet(`/quiz/questions?sessionId=${sessionId}`);
+      
+      if (data.success) {
+        const count = data.questions ? data.questions.length : 0;
+        setSessionQuestionCounts(prev => ({ ...prev, [sessionId]: count }));
+      }
+    } catch (err) {
+      console.error(`Error fetching question count for session ${sessionId}:`, err);
+      setSessionQuestionCounts(prev => ({ ...prev, [sessionId]: 0 }));
+    } finally {
+      setLoadingQuestionCounts(prev => ({ ...prev, [sessionId]: false }));
     }
   };
 
@@ -186,6 +226,61 @@ const AdminDashboard = ({ onHome }) => {
     }
   };
 
+  const handleCloneSession = async (e) => {
+    e.preventDefault();
+    if (!cloneSessionName.trim()) {
+      setSessionError("Session name is required");
+      return;
+    }
+    if (selectedSessionsForClone.length === 0) {
+      setSessionError("Please select at least one session");
+      return;
+    }
+    if (!cloneQuestionCount || parseInt(cloneQuestionCount) <= 0) {
+      setSessionError("Please enter a valid number of questions");
+      return;
+    }
+
+    try {
+      setCloningSession(true);
+      setSessionError("");
+      setSessionSuccess("");
+
+      const data = await apiPost("/sessions/clone", {
+        new_session_name: cloneSessionName.trim(),
+        source_session_ids: selectedSessionsForClone,
+        question_count: parseInt(cloneQuestionCount)
+      });
+
+      if (data.success) {
+        setSessionSuccess("Session created from existing sessions successfully!");
+        setShowCloneModal(false);
+        setSelectedSessionsForClone([]);
+        setCloneSessionName("");
+        setCloneQuestionCount("");
+        await fetchSessions();
+        setTimeout(() => setSessionSuccess(""), 3000);
+      } else {
+        setSessionError(data.message || "Failed to create session from existing");
+      }
+    } catch (err) {
+      setSessionError("Error creating session from existing. Please try again.");
+      console.error("Clone session error:", err);
+    } finally {
+      setCloningSession(false);
+    }
+  };
+
+  const handleToggleSessionForClone = (sessionId) => {
+    setSelectedSessionsForClone(prev => {
+      if (prev.includes(sessionId)) {
+        return prev.filter(id => id !== sessionId);
+      } else {
+        return [...prev, sessionId];
+      }
+    });
+  };
+
   const handleOpenAddQuestion = (sessionItem) => {
     setSelectedSessionForQuestion(sessionItem);
     setQuestionFormData({
@@ -234,6 +329,11 @@ const AdminDashboard = ({ onHome }) => {
       if (data.success) {
         setSessionSuccess("Question added successfully!");
         handleCloseAddQuestion();
+        // Update question count for the session
+        setSessionQuestionCounts(prev => ({
+          ...prev,
+          [selectedSessionForQuestion.id]: (prev[selectedSessionForQuestion.id] || 0) + 1
+        }));
         // Refresh questions for the session if viewing
         if (viewingSession && viewingSession.id === selectedSessionForQuestion.id) {
           handleViewQuestions(selectedSessionForQuestion);
@@ -306,6 +406,9 @@ const AdminDashboard = ({ onHome }) => {
       .then((data) => {
         if (data.success) {
           setSessionQuestions(data.questions);
+          // Update question count
+          const count = data.questions ? data.questions.length : 0;
+          setSessionQuestionCounts(prev => ({ ...prev, [sessionItem.id]: count }));
         }
         setLoadingQuestions(false);
       })
@@ -338,6 +441,10 @@ const AdminDashboard = ({ onHome }) => {
         // Also refresh the analysis tab if it's active
         if (activeTab === "analysis") {
           fetchQuestions(session?.id);
+        }
+        // Refresh question count if viewing session
+        if (viewingSession) {
+          fetchQuestionCount(viewingSession.id);
         }
       } else {
         alert(data.message || "Failed to update question");
@@ -405,7 +512,7 @@ const AdminDashboard = ({ onHome }) => {
   };
 
   return (
-    <div className="min-h-screen p-6" style={{ backgroundColor: '#FAFAFA' }}>
+    <div className="min-h-screen p-3 sm:p-4 md:p-6" style={{ backgroundColor: '#FAFAFA' }}>
       <div className="max-w-7xl mx-auto">
         {/* Header */}
         <div className="bg-white rounded-2xl p-4 md:p-6 mb-4 shadow-lg">
@@ -466,8 +573,8 @@ const AdminDashboard = ({ onHome }) => {
         </div>
 
         {/* Tabs */}
-        <div className="bg-white rounded-2xl p-4 mb-4 shadow-lg">
-          <div className="flex gap-6">
+        <div className="bg-white rounded-2xl p-3 sm:p-4 mb-4 shadow-lg">
+          <div className="flex flex-wrap gap-2 sm:gap-4 md:gap-6">
             <button
               onClick={() => setActiveTab("overview")}
               className={`flex items-center gap-2 px-4 py-2 rounded-lg font-semibold ${
@@ -511,53 +618,53 @@ const AdminDashboard = ({ onHome }) => {
         </div>
 
         {/* Summary Cards */}
-        <div className="grid grid-cols-4 gap-4 mb-4">
-          <div className="bg-white rounded-2xl p-6 shadow-lg">
-            <div className="flex items-center justify-between mb-4">
-              <div className="w-12 h-12 rounded-full flex items-center justify-center" style={{ backgroundColor: '#E3F2FD' }}>
-                <svg className="w-6 h-6" style={{ color: '#2196F3' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+          <div className="bg-white rounded-2xl p-4 sm:p-6 shadow-lg">
+            <div className="flex items-center justify-between mb-3 sm:mb-4">
+              <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full flex items-center justify-center" style={{ backgroundColor: '#E3F2FD' }}>
+                <svg className="w-5 h-5 sm:w-6 sm:h-6" style={{ color: '#2196F3' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                 </svg>
               </div>
             </div>
-            <p className="text-3xl font-bold text-gray-800 mb-1">{totalLoggedIn}</p>
-            <p className="text-sm text-gray-600">Total Logged In</p>
+            <p className="text-2xl sm:text-3xl font-bold text-gray-800 mb-1">{totalLoggedIn}</p>
+            <p className="text-xs sm:text-sm text-gray-600">Total Logged In</p>
           </div>
 
-          <div className="bg-white rounded-2xl p-6 shadow-lg">
-            <div className="flex items-center justify-between mb-4">
-              <div className="w-12 h-12 rounded-full flex items-center justify-center" style={{ backgroundColor: '#FFF9C4' }}>
-                <svg className="w-6 h-6" style={{ color: '#FBC02D' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <div className="bg-white rounded-2xl p-4 sm:p-6 shadow-lg">
+            <div className="flex items-center justify-between mb-3 sm:mb-4">
+              <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full flex items-center justify-center" style={{ backgroundColor: '#FFF9C4' }}>
+                <svg className="w-5 h-5 sm:w-6 sm:h-6" style={{ color: '#FBC02D' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
               </div>
             </div>
-            <p className="text-3xl font-bold text-gray-800 mb-1">{inProgress}</p>
-            <p className="text-sm text-gray-600">In Progress</p>
+            <p className="text-2xl sm:text-3xl font-bold text-gray-800 mb-1">{inProgress}</p>
+            <p className="text-xs sm:text-sm text-gray-600">In Progress</p>
           </div>
 
-          <div className="bg-white rounded-2xl p-6 shadow-lg">
-            <div className="flex items-center justify-between mb-4">
-              <div className="w-12 h-12 rounded-full flex items-center justify-center" style={{ backgroundColor: '#E8F5E9' }}>
-                <svg className="w-6 h-6" style={{ color: '#66BB6A' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <div className="bg-white rounded-2xl p-4 sm:p-6 shadow-lg">
+            <div className="flex items-center justify-between mb-3 sm:mb-4">
+              <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full flex items-center justify-center" style={{ backgroundColor: '#E8F5E9' }}>
+                <svg className="w-5 h-5 sm:w-6 sm:h-6" style={{ color: '#66BB6A' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                 </svg>
               </div>
             </div>
-            <p className="text-3xl font-bold text-gray-800 mb-1">{completed}</p>
-            <p className="text-sm text-gray-600">Completed</p>
+            <p className="text-2xl sm:text-3xl font-bold text-gray-800 mb-1">{completed}</p>
+            <p className="text-xs sm:text-sm text-gray-600">Completed</p>
           </div>
 
-          <div className="bg-white rounded-2xl p-6 shadow-lg">
-            <div className="flex items-center justify-between mb-4">
-              <div className="w-12 h-12 rounded-full flex items-center justify-center" style={{ backgroundColor: '#F3E5F5' }}>
-                <svg className="w-6 h-6" style={{ color: '#9C27B0' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <div className="bg-white rounded-2xl p-4 sm:p-6 shadow-lg">
+            <div className="flex items-center justify-between mb-3 sm:mb-4">
+              <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full flex items-center justify-center" style={{ backgroundColor: '#F3E5F5' }}>
+                <svg className="w-5 h-5 sm:w-6 sm:h-6" style={{ color: '#9C27B0' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z" />
                 </svg>
               </div>
             </div>
-            <p className="text-3xl font-bold text-gray-800 mb-1">{averageScore}%</p>
-            <p className="text-sm text-gray-600">Average Score</p>
+            <p className="text-2xl sm:text-3xl font-bold text-gray-800 mb-1">{averageScore}%</p>
+            <p className="text-xs sm:text-sm text-gray-600">Average Score</p>
           </div>
         </div>
 
@@ -565,46 +672,46 @@ const AdminDashboard = ({ onHome }) => {
         {activeTab === "overview" && (
           <>
             {/* Active Session Display */}
-            <div className="bg-white rounded-2xl p-6 shadow-lg mb-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-gray-500 mb-1">Active Session</p>
-                  <h2 className="text-2xl font-bold text-gray-800">
+            <div className="bg-white rounded-2xl p-4 sm:p-6 shadow-lg mb-4">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs sm:text-sm text-gray-500 mb-1">Active Session</p>
+                  <h2 className="text-lg sm:text-xl md:text-2xl font-bold text-gray-800 break-words">
                     {sessions.find(s => s.is_active === true)?.session_name || "No active session"}
                   </h2>
                 </div>
                 {sessions.find(s => s.is_active === true) && (
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-shrink-0">
                     <div className="w-3 h-3 rounded-full bg-green-500"></div>
-                    <span className="text-sm font-semibold text-green-600">ACTIVE</span>
+                    <span className="text-xs sm:text-sm font-semibold text-green-600">ACTIVE</span>
                   </div>
                 )}
               </div>
             </div>
 
             {/* Commissioner Activity */}
-            <div className="bg-white rounded-2xl p-6 shadow-lg">
-              <div className="mb-4">
-                <h2 className="text-2xl font-bold text-gray-800 mb-1">Commissioner Activity</h2>
-                <p className="text-sm text-gray-500">Real-time tracking of assessment participation</p>
+            <div className="bg-white rounded-2xl p-3 sm:p-4 md:p-6 shadow-lg">
+              <div className="mb-3 sm:mb-4">
+                <h2 className="text-xl sm:text-2xl font-bold text-gray-800 mb-1">Commissioner Activity</h2>
+                <p className="text-xs sm:text-sm text-gray-500">Real-time tracking of assessment participation</p>
               </div>
             <div className="border-t border-gray-200 pt-4">
               <div className="overflow-x-auto">
                 <table className="w-full">
                   <thead>
                     <tr>
-                      <th className="text-left text-xs font-semibold text-gray-500 uppercase py-3 px-4 whitespace-nowrap">COMMISSIONER DETAILS</th>
-                      <th className="text-left text-xs font-semibold text-gray-500 uppercase py-3 px-4 whitespace-nowrap">ULB NAME</th>
-                      <th className="text-left text-xs font-semibold text-gray-500 uppercase py-3 px-4 whitespace-nowrap">ROLE</th>
-                      <th className="text-left text-xs font-semibold text-gray-500 uppercase py-3 px-4 whitespace-nowrap">STATUS</th>
-                      <th className="text-left text-xs font-semibold text-gray-500 uppercase py-3 px-4 whitespace-nowrap">LOGIN TIME</th>
-                      <th className="text-left text-xs font-semibold text-gray-500 uppercase py-3 px-4 whitespace-nowrap">SESSION</th>
-                      <th className="text-left text-xs font-semibold text-gray-500 uppercase py-3 px-4 whitespace-nowrap">TOTAL Q.</th>
-                      <th className="text-left text-xs font-semibold text-gray-500 uppercase py-3 px-4 whitespace-nowrap">ANSWERED</th>
-                      <th className="text-left text-xs font-semibold text-gray-500 uppercase py-3 px-4 whitespace-nowrap">SKIPPED</th>
-                      <th className="text-left text-xs font-semibold text-gray-500 uppercase py-3 px-4 whitespace-nowrap">CORRECT</th>
-                      <th className="text-left text-xs font-semibold text-gray-500 uppercase py-3 px-4 whitespace-nowrap">SCORE</th>
-                      <th className="text-left text-xs font-semibold text-gray-500 uppercase py-3 px-4 whitespace-nowrap">ACTIONS</th>
+                      <th className="text-left text-[10px] sm:text-xs font-semibold text-gray-500 uppercase py-2 sm:py-3 px-2 sm:px-4 whitespace-nowrap">COMMISSIONER</th>
+                      <th className="text-left text-[10px] sm:text-xs font-semibold text-gray-500 uppercase py-2 sm:py-3 px-2 sm:px-4 whitespace-nowrap">ULB</th>
+                      <th className="text-left text-[10px] sm:text-xs font-semibold text-gray-500 uppercase py-2 sm:py-3 px-2 sm:px-4 whitespace-nowrap">ROLE</th>
+                      <th className="text-left text-[10px] sm:text-xs font-semibold text-gray-500 uppercase py-2 sm:py-3 px-2 sm:px-4 whitespace-nowrap">STATUS</th>
+                      <th className="text-left text-[10px] sm:text-xs font-semibold text-gray-500 uppercase py-2 sm:py-3 px-2 sm:px-4 whitespace-nowrap hidden md:table-cell">LOGIN TIME</th>
+                      <th className="text-left text-[10px] sm:text-xs font-semibold text-gray-500 uppercase py-2 sm:py-3 px-2 sm:px-4 whitespace-nowrap hidden lg:table-cell">SESSION</th>
+                      <th className="text-left text-[10px] sm:text-xs font-semibold text-gray-500 uppercase py-2 sm:py-3 px-2 sm:px-4 whitespace-nowrap">Q.</th>
+                      <th className="text-left text-[10px] sm:text-xs font-semibold text-gray-500 uppercase py-2 sm:py-3 px-2 sm:px-4 whitespace-nowrap">ANS</th>
+                      <th className="text-left text-[10px] sm:text-xs font-semibold text-gray-500 uppercase py-2 sm:py-3 px-2 sm:px-4 whitespace-nowrap hidden sm:table-cell">SKIP</th>
+                      <th className="text-left text-[10px] sm:text-xs font-semibold text-gray-500 uppercase py-2 sm:py-3 px-2 sm:px-4 whitespace-nowrap">COR</th>
+                      <th className="text-left text-[10px] sm:text-xs font-semibold text-gray-500 uppercase py-2 sm:py-3 px-2 sm:px-4 whitespace-nowrap">SCORE</th>
+                      <th className="text-left text-[10px] sm:text-xs font-semibold text-gray-500 uppercase py-2 sm:py-3 px-2 sm:px-4 whitespace-nowrap">ACT</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -625,27 +732,27 @@ const AdminDashboard = ({ onHome }) => {
                         const skipped = calculateSkipped(r);
                         return (
                           <tr key={index} className="border-t border-gray-100 hover:bg-gray-50">
-                            <td className="py-4 px-4 text-gray-800 font-medium whitespace-nowrap">{r.commissioner_name}</td>
-                            <td className="py-4 px-4 text-gray-600 text-sm whitespace-nowrap">{r.ulb_name}</td>
-                            <td className="py-4 px-4 text-gray-600 text-sm capitalize whitespace-nowrap">{r.role}</td>
-                            <td className="py-4 px-4 whitespace-nowrap">
-                              <span className="px-3 py-1 rounded-full text-xs font-semibold" style={{ backgroundColor: '#E8F5E9', color: '#66BB6A' }}>
-                                Completed
+                            <td className="py-3 sm:py-4 px-2 sm:px-4 text-gray-800 font-medium text-xs sm:text-sm whitespace-nowrap">{r.commissioner_name}</td>
+                            <td className="py-3 sm:py-4 px-2 sm:px-4 text-gray-600 text-xs sm:text-sm whitespace-nowrap">{r.ulb_name}</td>
+                            <td className="py-3 sm:py-4 px-2 sm:px-4 text-gray-600 text-xs sm:text-sm capitalize whitespace-nowrap">{r.role}</td>
+                            <td className="py-3 sm:py-4 px-2 sm:px-4 whitespace-nowrap">
+                              <span className="px-2 sm:px-3 py-0.5 sm:py-1 rounded-full text-[10px] sm:text-xs font-semibold" style={{ backgroundColor: '#E8F5E9', color: '#66BB6A' }}>
+                                Done
                               </span>
                             </td>
-                            <td className="py-4 px-4 text-gray-600 text-sm whitespace-nowrap">
+                            <td className="py-3 sm:py-4 px-2 sm:px-4 text-gray-600 text-xs sm:text-sm whitespace-nowrap hidden md:table-cell">
                               {new Date(r.attempted_at).toLocaleString()}
                             </td>
-                            <td className="py-4 px-4 text-gray-600 text-sm whitespace-nowrap">{r.session_name}</td>
-                            <td className="py-4 px-4 text-gray-600 text-sm">{totalQuestionsCount}</td>
-                            <td className="py-4 px-4 text-gray-600 text-sm">{answered}</td>
-                            <td className="py-4 px-4 text-gray-600 text-sm">{skipped}</td>
-                            <td className="py-4 px-4 text-gray-600 text-sm font-semibold text-green-600">{r.correct_answers}</td>
-                            <td className="py-4 px-4 text-gray-800 font-bold">{r.score_percentage || 0}%</td>
-                            <td className="py-4 px-4 whitespace-nowrap">
+                            <td className="py-3 sm:py-4 px-2 sm:px-4 text-gray-600 text-xs sm:text-sm whitespace-nowrap hidden lg:table-cell">{r.session_name}</td>
+                            <td className="py-3 sm:py-4 px-2 sm:px-4 text-gray-600 text-xs sm:text-sm text-center">{totalQuestionsCount}</td>
+                            <td className="py-3 sm:py-4 px-2 sm:px-4 text-gray-600 text-xs sm:text-sm text-center">{answered}</td>
+                            <td className="py-3 sm:py-4 px-2 sm:px-4 text-gray-600 text-xs sm:text-sm text-center hidden sm:table-cell">{skipped}</td>
+                            <td className="py-3 sm:py-4 px-2 sm:px-4 text-gray-600 text-xs sm:text-sm font-semibold text-green-600 text-center">{r.correct_answers}</td>
+                            <td className="py-3 sm:py-4 px-2 sm:px-4 text-gray-800 font-bold text-xs sm:text-sm">{r.score_percentage || 0}%</td>
+                            <td className="py-3 sm:py-4 px-2 sm:px-4 whitespace-nowrap">
                               <button
                                 onClick={() => handleView(r)}
-                                className="text-purple-600 hover:text-purple-800 text-sm font-semibold"
+                                className="text-purple-600 hover:text-purple-800 text-xs sm:text-sm font-semibold"
                               >
                                 View
                               </button>
@@ -663,10 +770,10 @@ const AdminDashboard = ({ onHome }) => {
         )}
 
         {activeTab === "analysis" && (
-          <div className="bg-white rounded-2xl p-6 shadow-lg">
-            <div className="mb-4">
-              <h2 className="text-2xl font-bold text-gray-800 mb-1">Question Analysis</h2>
-              <p className="text-sm text-gray-500">Performance breakdown by question</p>
+          <div className="bg-white rounded-2xl p-3 sm:p-4 md:p-6 shadow-lg">
+            <div className="mb-3 sm:mb-4">
+              <h2 className="text-xl sm:text-2xl font-bold text-gray-800 mb-1">Question Analysis</h2>
+              <p className="text-xs sm:text-sm text-gray-500">Performance breakdown by question</p>
             </div>
             <div className="border-t border-gray-200 pt-4">
               {questions.length === 0 ? (
@@ -674,99 +781,163 @@ const AdminDashboard = ({ onHome }) => {
                   <p className="text-gray-500">No questions available</p>
                 </div>
               ) : (
-                <div className="space-y-12">
+                <div className="space-y-8 sm:space-y-12">
                   {questions.map((q, index) => {
                     const correctAnswerText = q[`option_${q.correct_option?.toLowerCase()}`];
+                    const questionId = q.id || index;
+                    const currentFilter = questionFilters[questionId] || null;
+                    
+                    // Handler to toggle filter
+                    const handleFilterClick = (filterType) => {
+                      setQuestionFilters(prev => {
+                        const current = prev[questionId];
+                        // If clicking the same filter, remove it (hide detailed view)
+                        if (current === filterType) {
+                          const newFilters = { ...prev };
+                          delete newFilters[questionId];
+                          return newFilters;
+                        }
+                        // Otherwise set the new filter (show detailed view)
+                        return { ...prev, [questionId]: filterType };
+                      });
+                    };
+                    
+                    // Filter responses based on current filter
+                    const filteredResponses = (!q.responses || q.responses.length === 0) ? [] : 
+                      q.responses.filter((resp) => {
+                        if (currentFilter === null) return false; // Don't show any when no filter
+                        const isSkipped = resp.status === 'skipped';
+                        if (currentFilter === 'correct') {
+                          return !isSkipped && resp.is_correct === true;
+                        } else if (currentFilter === 'incorrect') {
+                          return !isSkipped && resp.is_correct === false;
+                        } else if (currentFilter === 'skipped') {
+                          return isSkipped === true;
+                        }
+                        return false;
+                      });
+                    
                     return (
-                      <div key={q.id || index} className="pb-8 border-b border-gray-100 last:border-b-0">
+                      <div key={questionId} className="pb-6 sm:pb-8 border-b border-gray-100 last:border-b-0">
                         {/* Question Header */}
-                        <div className="mb-6">
-                          <h3 className="text-lg font-bold text-gray-800 mb-2">
-                            Question {index + 1}: {q.question}
+                        <div className="mb-4 sm:mb-6">
+                          <h3 className="text-base sm:text-lg font-bold text-gray-800 mb-2 leading-tight">
+                            Q {index + 1}: {q.question}
                           </h3>
-                          <p className="text-sm font-semibold text-green-600">
+                          <p className="text-xs sm:text-sm font-semibold text-green-600 break-words">
                             Correct Answer: {correctAnswerText}
                           </p>
                         </div>
 
                         {/* Summary Metrics */}
-                        <div className="grid grid-cols-3 gap-8 max-w-2xl mx-auto mb-8 text-center">
-                          <div>
+                        <div className="grid grid-cols-3 gap-4 sm:gap-6 md:gap-8 max-w-2xl mx-auto mb-6 sm:mb-8 text-center">
+                          <div 
+                            onClick={() => handleFilterClick('correct')}
+                            className={`cursor-pointer transition-all duration-150 rounded-lg p-3 ${
+                              currentFilter === 'correct' 
+                                ? 'bg-green-50 ring-2 ring-green-400' 
+                                : 'hover:bg-green-50 hover:ring-1 hover:ring-green-200'
+                            }`}
+                          >
                             <p className="text-2xl font-bold text-green-600">{q.correct || 0}</p>
                             <p className="text-xs text-gray-500 font-semibold uppercase tracking-wider">Correct</p>
                           </div>
-                          <div>
+                          <div 
+                            onClick={() => handleFilterClick('incorrect')}
+                            className={`cursor-pointer transition-all duration-150 rounded-lg p-3 ${
+                              currentFilter === 'incorrect' 
+                                ? 'bg-red-50 ring-2 ring-red-400' 
+                                : 'hover:bg-red-50 hover:ring-1 hover:ring-red-200'
+                            }`}
+                          >
                             <p className="text-2xl font-bold text-red-600">{q.wrong || 0}</p>
                             <p className="text-xs text-gray-500 font-semibold uppercase tracking-wider">Incorrect</p>
                           </div>
-                          <div>
+                          <div 
+                            onClick={() => handleFilterClick('skipped')}
+                            className={`cursor-pointer transition-all duration-150 rounded-lg p-3 ${
+                              currentFilter === 'skipped' 
+                                ? 'bg-orange-50 ring-2 ring-orange-400' 
+                                : 'hover:bg-orange-50 hover:ring-1 hover:ring-orange-200'
+                            }`}
+                          >
                             <p className="text-2xl font-bold text-orange-500">{q.skipped || 0}</p>
                             <p className="text-xs text-gray-500 font-semibold uppercase tracking-wider">Skipped</p>
                           </div>
                         </div>
 
-                        {/* Detailed Responses Table */}
-                        <div className="overflow-x-auto border border-gray-100 rounded-xl">
-                          <table className="w-full text-sm">
-                            <thead className="bg-gray-50 border-b border-gray-100">
-                              <tr>
-                                <th className="text-left py-3 px-4 text-xs font-semibold text-gray-500 uppercase">COMMISSIONER</th>
-                                <th className="text-left py-3 px-4 text-xs font-semibold text-gray-500 uppercase">ULB</th>
-                                <th className="text-left py-3 px-4 text-xs font-semibold text-gray-500 uppercase">STATUS</th>
-                                <th className="text-left py-3 px-4 text-xs font-semibold text-gray-500 uppercase">SELECTED ANSWER</th>
-                                <th className="text-left py-3 px-4 text-xs font-semibold text-gray-500 uppercase">RESULT</th>
-                              </tr>
-                            </thead>
-                            <tbody className="divide-y divide-gray-50">
-                              {(!q.responses || q.responses.length === 0) ? (
+                        {/* Detailed Responses Table - Only show when a filter is active */}
+                        {currentFilter !== null && (
+                          <div className="overflow-x-auto border border-gray-100 rounded-xl">
+                            <table className="w-full text-sm">
+                              <thead className="bg-gray-50 border-b border-gray-100">
                                 <tr>
-                                  <td colSpan="5" className="py-8 text-center text-gray-400 italic">No responses recorded for this question yet</td>
+                                  <th className="text-left py-2 sm:py-3 px-2 sm:px-4 text-[10px] sm:text-xs font-semibold text-gray-500 uppercase">COMMISSIONER</th>
+                                  <th className="text-left py-2 sm:py-3 px-2 sm:px-4 text-[10px] sm:text-xs font-semibold text-gray-500 uppercase">ULB</th>
+                                  <th className="text-left py-2 sm:py-3 px-2 sm:px-4 text-[10px] sm:text-xs font-semibold text-gray-500 uppercase">STATUS</th>
+                                  <th className="text-left py-2 sm:py-3 px-2 sm:px-4 text-[10px] sm:text-xs font-semibold text-gray-500 uppercase">SELECTED ANSWER</th>
+                                  <th className="text-left py-2 sm:py-3 px-2 sm:px-4 text-[10px] sm:text-xs font-semibold text-gray-500 uppercase">DURATION (SEC)</th>
+                                  <th className="text-left py-2 sm:py-3 px-2 sm:px-4 text-[10px] sm:text-xs font-semibold text-gray-500 uppercase">RESULT</th>
                                 </tr>
-                              ) : (
-                                q.responses.map((resp, ridx) => {
-                                  const selectedText = resp.selected_option ? q[`option_${resp.selected_option.toLowerCase()}`] : "-";
-                                  const isSkipped = resp.status === 'skipped';
-                                  
-                                  return (
-                                    <tr key={ridx} className="hover:bg-gray-50 transition-colors">
-                                      <td className="py-4 px-4 font-medium text-gray-800">{resp.commissioner_name}</td>
-                                      <td className="py-4 px-4 text-gray-600">{resp.ulb_name}</td>
-                                      <td className="py-4 px-4">
-                                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
-                                          isSkipped 
-                                            ? 'bg-orange-50 text-orange-600 border border-orange-100' 
-                                            : 'bg-blue-50 text-blue-600 border border-blue-100'
-                                        }`}>
-                                          {resp.status}
-                                        </span>
-                                      </td>
-                                      <td className="py-4 px-4 text-gray-600">{selectedText}</td>
-                                      <td className="py-4 px-4">
-                                        {isSkipped ? (
-                                          <span className="text-gray-400 italic">Not answered</span>
-                                        ) : resp.is_correct ? (
-                                          <span className="flex items-center gap-1.5 text-green-600 font-bold">
-                                            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                                              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                                            </svg>
-                                            Correct
+                              </thead>
+                              <tbody className="divide-y divide-gray-50">
+                                {filteredResponses.length === 0 ? (
+                                  <tr>
+                                    <td colSpan="6" className="py-8 text-center text-gray-400 italic">
+                                      No {currentFilter} responses found
+                                    </td>
+                                  </tr>
+                                ) : (
+                                  filteredResponses.map((resp, ridx) => {
+                                    const selectedText = resp.selected_option ? q[`option_${resp.selected_option.toLowerCase()}`] : "-";
+                                    const isSkipped = resp.status === 'skipped';
+                                    
+                                    return (
+                                      <tr key={ridx} className="hover:bg-gray-50 transition-colors">
+                                        <td className="py-3 sm:py-4 px-2 sm:px-4 font-medium text-gray-800 text-xs sm:text-sm">{resp.commissioner_name}</td>
+                                        <td className="py-3 sm:py-4 px-2 sm:px-4 text-gray-600 text-xs sm:text-sm">{resp.ulb_name}</td>
+                                        <td className="py-3 sm:py-4 px-2 sm:px-4">
+                                          <span className={`px-1.5 sm:px-2 py-0.5 rounded-full text-[9px] sm:text-[10px] font-bold uppercase ${
+                                            isSkipped 
+                                              ? 'bg-orange-50 text-orange-600 border border-orange-100' 
+                                              : 'bg-blue-50 text-blue-600 border border-blue-100'
+                                          }`}>
+                                            {resp.status}
                                           </span>
-                                        ) : (
-                                          <span className="flex items-center gap-1.5 text-red-600 font-bold">
-                                            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                                              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
-                                            </svg>
-                                            Incorrect
-                                          </span>
-                                        )}
-                                      </td>
-                                    </tr>
-                                  );
-                                })
-                              )}
-                            </tbody>
-                          </table>
-                        </div>
+                                        </td>
+                                        <td className="py-3 sm:py-4 px-2 sm:px-4 text-gray-600 text-xs sm:text-sm break-words">{selectedText}</td>
+                                        <td className="py-3 sm:py-4 px-2 sm:px-4 text-gray-600 text-xs sm:text-sm">
+                                          {resp.duration_seconds !== null && resp.duration_seconds !== undefined ? resp.duration_seconds : "-"}
+                                        </td>
+                                        <td className="py-3 sm:py-4 px-2 sm:px-4">
+                                          {isSkipped ? (
+                                            <span className="text-gray-400 italic text-xs sm:text-sm">Not answered</span>
+                                          ) : resp.is_correct ? (
+                                            <span className="flex items-center gap-1 sm:gap-1.5 text-green-600 font-bold text-xs sm:text-sm">
+                                              <svg className="w-3 h-3 sm:w-4 sm:h-4" fill="currentColor" viewBox="0 0 20 20">
+                                                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                                              </svg>
+                                              <span className="hidden sm:inline">Correct</span>
+                                              <span className="sm:hidden">✓</span>
+                                            </span>
+                                          ) : (
+                                            <span className="flex items-center gap-1 sm:gap-1.5 text-red-600 font-bold text-xs sm:text-sm">
+                                              <svg className="w-3 h-3 sm:w-4 sm:h-4" fill="currentColor" viewBox="0 0 20 20">
+                                                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                                              </svg>
+                                              <span className="hidden sm:inline">Incorrect</span>
+                                              <span className="sm:hidden">✗</span>
+                                            </span>
+                                          )}
+                                        </td>
+                                      </tr>
+                                    );
+                                  })
+                                )}
+                              </tbody>
+                            </table>
+                          </div>
+                        )}
                       </div>
                     );
                   })}
@@ -819,47 +990,115 @@ const AdminDashboard = ({ onHome }) => {
             )}
 
             {/* Add Session Form */}
-            <div className="bg-white rounded-2xl p-6 shadow-lg mb-4">
-              <div className="mb-4">
-                <h2 className="text-xl font-bold text-gray-800 mb-1">Add Session</h2>
-                <p className="text-sm text-gray-500">Create a new assessment session</p>
+            <div className="bg-white rounded-2xl p-4 sm:p-6 shadow-lg mb-4">
+              <div className="mb-3 sm:mb-4">
+                <h2 className="text-lg sm:text-xl font-bold text-gray-800 mb-1">Add Session</h2>
+                <p className="text-xs sm:text-sm text-gray-500">Create a new assessment session</p>
               </div>
-              <form onSubmit={handleAddSession} className="flex gap-3">
-                <input
-                  type="text"
-                  value={newSessionName}
-                  onChange={(e) => setNewSessionName(e.target.value)}
-                  placeholder="Enter session name"
-                  className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                  disabled={addingSession}
-                />
+              <div className="flex flex-col sm:flex-row gap-3">
+                <form onSubmit={handleAddSession} className="flex flex-col sm:flex-row gap-3 flex-1">
+                  <input
+                    type="text"
+                    value={newSessionName}
+                    onChange={(e) => setNewSessionName(e.target.value)}
+                    placeholder="Enter session name"
+                    className="flex-1 px-3 sm:px-4 py-2 text-sm sm:text-base border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                    disabled={addingSession}
+                  />
+                  <button
+                    type="submit"
+                    disabled={addingSession || !newSessionName.trim()}
+                    className="px-4 sm:px-6 py-2 rounded-lg text-white font-semibold disabled:opacity-50 disabled:cursor-not-allowed transition-opacity text-sm sm:text-base whitespace-nowrap"
+                    style={{ backgroundColor: '#9C27B0' }}
+                  >
+                    {addingSession ? (
+                      <span className="flex items-center justify-center gap-2">
+                        <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        Adding...
+                      </span>
+                    ) : (
+                      "Add Session"
+                    )}
+                  </button>
+                </form>
                 <button
-                  type="submit"
-                  disabled={addingSession || !newSessionName.trim()}
-                  className="px-6 py-2 rounded-lg text-white font-semibold disabled:opacity-50 disabled:cursor-not-allowed transition-opacity"
-                  style={{ backgroundColor: '#9C27B0' }}
+                  onClick={() => setShowCloneModal(true)}
+                  className="px-4 sm:px-6 py-2 rounded-lg text-white font-semibold transition-opacity text-sm sm:text-base whitespace-nowrap"
+                  style={{ backgroundColor: '#2196F3' }}
                 >
-                  {addingSession ? (
-                    <span className="flex items-center gap-2">
-                      <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                      </svg>
-                      Adding...
-                    </span>
-                  ) : (
-                    "Add Session"
-                  )}
+                  Create Session From Existing
                 </button>
-              </form>
+              </div>
             </div>
 
             {/* Sessions Table */}
-            <div className="bg-white rounded-2xl p-6 shadow-lg">
-              <div className="mb-4">
-                <h2 className="text-2xl font-bold text-gray-800 mb-1">Sessions</h2>
-                <p className="text-sm text-gray-500">Manage assessment sessions</p>
+            <div className="bg-white rounded-2xl p-3 sm:p-4 md:p-6 shadow-lg">
+              <div className="mb-3 sm:mb-4">
+                <h2 className="text-xl sm:text-2xl font-bold text-gray-800 mb-1">Sessions</h2>
+                <p className="text-xs sm:text-sm text-gray-500">Manage assessment sessions</p>
               </div>
+              
+              {/* Session Statistics Cards */}
+              {!sessionsLoading && sessions.length > 0 && (() => {
+                const totalSessions = sessions.length;
+                const activeSessions = sessions.filter(
+                  s => s.is_active === true || s.status === "active"
+                ).length;
+                const inactiveSessions = totalSessions - activeSessions;
+
+                return (
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 mb-4 sm:mb-6">
+                    {/* Total Sessions */}
+                    <div className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-xl p-4 border border-purple-200">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-xs sm:text-sm text-purple-600 font-medium mb-1">Total Sessions</p>
+                          <p className="text-2xl sm:text-3xl font-bold text-purple-700">{totalSessions}</p>
+                        </div>
+                        <div className="bg-purple-200 rounded-lg p-2 sm:p-3">
+                          <svg className="w-6 h-6 sm:w-8 sm:h-8 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                          </svg>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Active Sessions */}
+                    <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-xl p-4 border border-green-200">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-xs sm:text-sm text-green-600 font-medium mb-1">Active Sessions</p>
+                          <p className="text-2xl sm:text-3xl font-bold text-green-700">{activeSessions}</p>
+                        </div>
+                        <div className="bg-green-200 rounded-lg p-2 sm:p-3">
+                          <svg className="w-6 h-6 sm:w-8 sm:h-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Inactive Sessions */}
+                    <div className="bg-gradient-to-br from-gray-50 to-gray-100 rounded-xl p-4 border border-gray-200">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-xs sm:text-sm text-gray-600 font-medium mb-1">Inactive Sessions</p>
+                          <p className="text-2xl sm:text-3xl font-bold text-gray-700">{inactiveSessions}</p>
+                        </div>
+                        <div className="bg-gray-200 rounded-lg p-2 sm:p-3">
+                          <svg className="w-6 h-6 sm:w-8 sm:h-8 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 9v6m4-6v6m7-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+
               <div className="border-t border-gray-200 pt-4">
                 {sessionsLoading && sessions.length === 0 ? (
                   <div className="py-12 text-center">
@@ -878,6 +1117,7 @@ const AdminDashboard = ({ onHome }) => {
                     <table className="w-full">
                       <thead>
                         <tr>
+                          <th className="text-left text-xs font-semibold text-gray-500 uppercase py-3 px-4">SESSION ID</th>
                           <th className="text-left text-xs font-semibold text-gray-500 uppercase py-3 px-4">SESSION NAME</th>
                           <th className="text-left text-xs font-semibold text-gray-500 uppercase py-3 px-4">STATUS</th>
                           <th className="text-left text-xs font-semibold text-gray-500 uppercase py-3 px-4">ACTIONS</th>
@@ -898,9 +1138,11 @@ const AdminDashboard = ({ onHome }) => {
                                   isActive ? "bg-green-50" : ""
                                 }`}
                               >
-                                <td className="py-4 px-4">
-                                  <p className="font-semibold text-gray-800">{sessionItem.session_name}</p>
-                                  <p className="text-xs text-gray-500">ID: {sessionItem.id}</p>
+                                <td className="py-3 sm:py-4 px-2 sm:px-4">
+                                  <p className="text-gray-800 text-xs sm:text-sm font-medium">{sessionItem.id}</p>
+                                </td>
+                                <td className="py-3 sm:py-4 px-2 sm:px-4">
+                                  <p className="font-semibold text-gray-800 text-sm sm:text-base break-words">{sessionItem.session_name}</p>
                                 </td>
                                 <td className="py-4 px-4">
                                   {isActive ? (
@@ -920,12 +1162,12 @@ const AdminDashboard = ({ onHome }) => {
                                     </span>
                                   )}
                                 </td>
-                                <td className="py-4 px-4">
-                                  <div className="flex items-center gap-2 flex-wrap">
+                                <td className="py-3 sm:py-4 px-2 sm:px-4">
+                                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
                                     {isActive ? (
                                       <button
                                         disabled
-                                        className="px-4 py-2 rounded-lg text-sm font-semibold text-gray-400 bg-gray-100 cursor-not-allowed"
+                                        className="px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-semibold text-gray-400 bg-gray-100 cursor-not-allowed"
                                       >
                                         Active
                                       </button>
@@ -933,16 +1175,17 @@ const AdminDashboard = ({ onHome }) => {
                                       <button
                                         onClick={() => handleActivateSession(sessionItem.id)}
                                         disabled={isActivating || activatingId !== null}
-                                        className="px-4 py-2 rounded-lg text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-opacity"
+                                        className="px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-opacity"
                                         style={{ backgroundColor: '#9C27B0' }}
                                       >
                                         {isActivating ? (
-                                          <span className="flex items-center gap-2">
-                                            <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                                          <span className="flex items-center justify-center gap-1 sm:gap-2">
+                                            <svg className="animate-spin h-3 w-3 sm:h-4 sm:w-4" fill="none" viewBox="0 0 24 24">
                                               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                                               <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                                             </svg>
-                                            Activating...
+                                            <span className="hidden sm:inline">Activating...</span>
+                                            <span className="sm:hidden">...</span>
                                           </span>
                                         ) : (
                                           "Activate"
@@ -951,28 +1194,33 @@ const AdminDashboard = ({ onHome }) => {
                                     )}
                                     <button
                                       onClick={() => handleViewQuestions(sessionItem)}
-                                      className="px-4 py-2 rounded-lg text-sm font-semibold text-purple-600 border border-purple-600 hover:bg-purple-50 transition-colors"
+                                      className="px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-semibold text-purple-600 border border-purple-600 hover:bg-purple-50 transition-colors flex items-center justify-center gap-1 sm:gap-2"
                                     >
-                                      View Questions
+                                      <span className="hidden sm:inline">View Questions</span>
+                                      <span className="sm:hidden">View</span>
+                                      {loadingQuestionCounts[sessionItem.id] ? (
+                                        <span className="px-1.5 sm:px-2 py-0.5 bg-purple-100 rounded-full text-[10px] sm:text-xs font-bold text-purple-700">
+                                          ...
+                                        </span>
+                                      ) : (
+                                        <span className="px-1.5 sm:px-2 py-0.5 bg-purple-100 rounded-full text-[10px] sm:text-xs font-bold text-purple-700">
+                                          {sessionQuestionCounts[sessionItem.id] !== undefined ? sessionQuestionCounts[sessionItem.id] : 0}
+                                        </span>
+                                      )}
                                     </button>
                                     <button
                                       onClick={() => handleOpenAddQuestion(sessionItem)}
-                                      className="px-4 py-2 rounded-lg text-sm font-semibold text-blue-600 border border-blue-600 hover:bg-blue-50 transition-colors"
+                                      className="px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-semibold text-blue-600 border border-blue-600 hover:bg-blue-50 transition-colors"
                                     >
-                                      Add Question
-                                    </button>
-                                    <button
-                                      onClick={() => handleToggleSessionAnalysis(sessionItem.id)}
-                                      className="px-4 py-2 rounded-lg text-sm font-semibold text-green-600 border border-green-600 hover:bg-green-50 transition-colors"
-                                    >
-                                      {isExpanded ? "Hide Analysis" : "Show Analysis"}
+                                      <span className="hidden sm:inline">Add Question</span>
+                                      <span className="sm:hidden">Add Q</span>
                                     </button>
                                   </div>
                                 </td>
                               </tr>
                               {isExpanded && (
                                 <tr>
-                                  <td colSpan="3" className="px-4 py-4 bg-gray-50">
+                                  <td colSpan="4" className="px-4 py-4 bg-gray-50">
                                     <div className="bg-white rounded-lg p-4 border border-gray-200">
                                       <h3 className="text-lg font-bold text-gray-800 mb-4">Question Analysis</h3>
                                       {isLoadingAnalysis ? (
@@ -1291,6 +1539,138 @@ const AdminDashboard = ({ onHome }) => {
                   Close Modal
                 </button>
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* Clone Session Modal */}
+        {showCloneModal && (
+          <div
+            className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+            onClick={() => {
+              if (!cloningSession) {
+                setShowCloneModal(false);
+                setSelectedSessionsForClone([]);
+                setCloneSessionName("");
+                setCloneQuestionCount("");
+              }
+            }}
+          >
+            <div
+              className="bg-white rounded-2xl p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h3 className="text-2xl font-bold text-gray-800">Create Session From Existing</h3>
+                  <p className="text-sm text-gray-500 mt-1">Select sessions and create a new session with questions</p>
+                </div>
+                <button
+                  onClick={() => {
+                    if (!cloningSession) {
+                      setShowCloneModal(false);
+                      setSelectedSessionsForClone([]);
+                      setCloneSessionName("");
+                      setCloneQuestionCount("");
+                    }
+                  }}
+                  className="text-gray-500 hover:text-gray-700"
+                  disabled={cloningSession}
+                >
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+              <form onSubmit={handleCloneSession} className="space-y-4">
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">New Session Name</label>
+                  <input
+                    type="text"
+                    value={cloneSessionName}
+                    onChange={(e) => setCloneSessionName(e.target.value)}
+                    placeholder="Enter new session name"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    required
+                    disabled={cloningSession}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">Number of Questions</label>
+                  <input
+                    type="number"
+                    value={cloneQuestionCount}
+                    onChange={(e) => setCloneQuestionCount(e.target.value)}
+                    placeholder="Enter number of questions"
+                    min="1"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    required
+                    disabled={cloningSession}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">Select Existing Sessions</label>
+                  <div className="border border-gray-300 rounded-lg p-4 max-h-64 overflow-y-auto">
+                    {sessions.length === 0 ? (
+                      <p className="text-gray-500 text-sm">No sessions available</p>
+                    ) : (
+                      <div className="space-y-2">
+                        {sessions.map((session) => (
+                          <label
+                            key={session.id}
+                            className="flex items-center gap-3 p-2 hover:bg-gray-50 rounded cursor-pointer"
+                          >
+                            <input
+                              type="checkbox"
+                              checked={selectedSessionsForClone.includes(session.id)}
+                              onChange={() => handleToggleSessionForClone(session.id)}
+                              className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                              disabled={cloningSession}
+                            />
+                            <div className="flex-1">
+                              <p className="text-sm font-medium text-gray-800">{session.session_name}</p>
+                              <p className="text-xs text-gray-500">ID: {session.id}</p>
+                            </div>
+                          </label>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+                <div className="flex items-center justify-end gap-3 pt-4">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowCloneModal(false);
+                      setSelectedSessionsForClone([]);
+                      setCloneSessionName("");
+                      setCloneQuestionCount("");
+                    }}
+                    className="px-4 py-2 text-gray-700 font-semibold hover:bg-gray-100 rounded-lg transition-colors"
+                    disabled={cloningSession}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={cloningSession || !cloneSessionName.trim() || selectedSessionsForClone.length === 0 || !cloneQuestionCount || parseInt(cloneQuestionCount) <= 0}
+                    className="px-4 py-2 rounded-lg text-white font-semibold disabled:opacity-50 disabled:cursor-not-allowed transition-opacity"
+                    style={{ backgroundColor: '#2196F3' }}
+                  >
+                    {cloningSession ? (
+                      <span className="flex items-center justify-center gap-2">
+                        <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        Creating...
+                      </span>
+                    ) : (
+                      "Create Session"
+                    )}
+                  </button>
+                </div>
+              </form>
             </div>
           </div>
         )}

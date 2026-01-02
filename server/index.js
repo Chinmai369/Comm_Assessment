@@ -21,6 +21,11 @@ app.use('/api/results', resultRoutes);
 app.use('/api/sessions', sessionRoutes);
 
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+const HOST = process.env.HOST || '0.0.0.0'; // Listen on all network interfaces
+
+app.listen(PORT, HOST, () => {
+  console.log(`Server running on http://${HOST === '0.0.0.0' ? 'localhost' : HOST}:${PORT}`);
+  console.log(`✅ Server is accessible from network!`);
+  console.log(`📱 Mobile access: http://YOUR_IP_ADDRESS:${PORT}`);
+  console.log(`💻 Local access: http://localhost:${PORT}`);
 });

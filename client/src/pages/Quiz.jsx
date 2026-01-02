@@ -20,6 +20,9 @@ const Quiz = ({ commissionerId: commissionerIdProp }) => {
   const [submitted, setSubmitted] = useState(false);
   const [showAnswer, setShowAnswer] = useState(false);
   const [expandedQuestions, setExpandedQuestions] = useState({});
+  const [questionStartTime, setQuestionStartTime] = useState(Date.now());
+const [timeSpent, setTimeSpent] = useState([]);
+
 
   // Function to shuffle array (Fisher-Yates algorithm)
   const shuffleArray = (array) => {
@@ -147,17 +150,17 @@ const Quiz = ({ commissionerId: commissionerIdProp }) => {
     const circleColor = percentage >= 70 ? "#4CAF50" : percentage >= 50 ? "#2196F3" : percentage >= 30 ? "#FF9800" : "#F44336";
 
     return (
-      <div className="min-h-screen p-6" style={{ backgroundColor: '#E8F5E9' }}>
+      <div className="min-h-screen p-3 sm:p-4 md:p-6" style={{ backgroundColor: '#E8F5E9' }}>
         <div className="max-w-4xl mx-auto">
           {/* Header */}
-          <div className="bg-white rounded-2xl p-6 mb-4 shadow-lg">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-4">
-                <div className="w-12 h-12 rounded-full relative overflow-hidden">
+          <div className="bg-white rounded-2xl p-4 sm:p-6 mb-4 shadow-lg">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+              <div className="flex items-center gap-3 sm:gap-4">
+                <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full relative overflow-hidden flex-shrink-0">
                   <div className="absolute top-0 left-0 right-0 h-1/2" style={{ backgroundColor: '#64B5F6' }}></div>
                   <div className="absolute bottom-0 left-0 right-0 h-1/2" style={{ backgroundColor: '#66BB6A' }}></div>
                   <div className="absolute inset-0 flex items-center justify-center">
-                    <div className="flex items-end justify-center gap-1 h-6">
+                    <div className="flex items-end justify-center gap-1 h-5 sm:h-6">
                       <div className="w-1 bg-blue-700 h-2"></div>
                       <div className="w-1 bg-blue-700 h-4"></div>
                       <div className="w-1 bg-blue-700 h-3"></div>
@@ -166,20 +169,20 @@ const Quiz = ({ commissionerId: commissionerIdProp }) => {
                   </div>
                 </div>
                 <div>
-                  <p className="text-xs uppercase tracking-wide text-gray-600">MUNICIPAL</p>
-                  <h1 className="text-2xl font-bold text-gray-800">Assessment Complete</h1>
+                  <p className="text-[10px] sm:text-xs uppercase tracking-wide text-gray-600">MUNICIPAL</p>
+                  <h1 className="text-xl sm:text-2xl font-bold text-gray-800">Assessment Complete</h1>
                 </div>
               </div>
-              <div className="text-right flex flex-col items-end gap-2">
+              <div className="w-full sm:w-auto text-left sm:text-right flex flex-col sm:flex-col items-start sm:items-end gap-2">
                 <div>
-                  <p className="text-sm text-gray-600">Commissioner ID</p>
-                  <p className="text-lg font-semibold text-gray-800">{commissionerId}</p>
+                  <p className="text-xs sm:text-sm text-gray-600">Commissioner ID</p>
+                  <p className="text-base sm:text-lg font-semibold text-gray-800 break-all">{commissionerId}</p>
                 </div>
                 <button
                   onClick={handleLogout}
-                  className="px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-semibold hover:bg-red-700 transition-colors flex items-center gap-2"
+                  className="px-3 sm:px-4 py-2 bg-red-600 text-white rounded-lg text-xs sm:text-sm font-semibold hover:bg-red-700 transition-colors flex items-center gap-2 w-full sm:w-auto justify-center sm:justify-start"
                 >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className="w-3 h-3 sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
                   </svg>
                   Logout
@@ -189,10 +192,31 @@ const Quiz = ({ commissionerId: commissionerIdProp }) => {
           </div>
 
           {/* Score Card */}
-          <div className="bg-white rounded-2xl p-8 mb-4 shadow-lg">
+          <div className="bg-white rounded-2xl p-6 sm:p-8 mb-4 shadow-lg">
             <div className="flex flex-col items-center">
-              <div className="relative w-32 h-32 mb-4">
-                <svg className="w-32 h-32 transform -rotate-90">
+              <div className="relative w-24 h-24 sm:w-32 sm:h-32 mb-4">
+                <svg className="w-24 h-24 sm:w-32 sm:h-32 transform -rotate-90">
+                  <circle
+                    cx="48"
+                    cy="48"
+                    r="42"
+                    stroke="#E0E0E0"
+                    strokeWidth="6"
+                    fill="none"
+                    className="sm:hidden"
+                  />
+                  <circle
+                    cx="48"
+                    cy="48"
+                    r="42"
+                    stroke={circleColor}
+                    strokeWidth="6"
+                    fill="none"
+                    strokeDasharray={`${2 * Math.PI * 42}`}
+                    strokeDashoffset={`${2 * Math.PI * 42 * (1 - percentage / 100)}`}
+                    strokeLinecap="round"
+                    className="sm:hidden"
+                  />
                   <circle
                     cx="64"
                     cy="64"
@@ -200,6 +224,7 @@ const Quiz = ({ commissionerId: commissionerIdProp }) => {
                     stroke="#E0E0E0"
                     strokeWidth="8"
                     fill="none"
+                    className="hidden sm:block"
                   />
                   <circle
                     cx="64"
@@ -211,38 +236,39 @@ const Quiz = ({ commissionerId: commissionerIdProp }) => {
                     strokeDasharray={`${2 * Math.PI * 56}`}
                     strokeDashoffset={`${2 * Math.PI * 56 * (1 - percentage / 100)}`}
                     strokeLinecap="round"
+                    className="hidden sm:block"
                   />
                 </svg>
                 <div className="absolute inset-0 flex items-center justify-center">
-                  <span className="text-3xl font-bold" style={{ color: circleColor }}>
+                  <span className="text-2xl sm:text-3xl font-bold" style={{ color: circleColor }}>
                     {percentage}%
                   </span>
                 </div>
               </div>
-              <h2 className={`text-2xl font-bold mb-4 ${statusColor}`}>{status}</h2>
-              <p className="text-gray-600 mb-6">
+              <h2 className={`text-xl sm:text-2xl font-bold mb-3 sm:mb-4 ${statusColor}`}>{status}</h2>
+              <p className="text-sm sm:text-base text-gray-600 mb-4 sm:mb-6 text-center px-4">
                 You answered {correctCount} out of {questions.length} questions correctly
               </p>
-              <div className="flex gap-6">
+              <div className="flex gap-4 sm:gap-6 w-full justify-center">
                 <div className="text-center">
-                  <p className="text-2xl font-bold text-green-600">{correctCount}</p>
-                  <p className="text-sm text-gray-600">Correct</p>
+                  <p className="text-xl sm:text-2xl font-bold text-green-600">{correctCount}</p>
+                  <p className="text-xs sm:text-sm text-gray-600">Correct</p>
                 </div>
                 <div className="text-center">
-                  <p className="text-2xl font-bold text-red-600">{wrongCount}</p>
-                  <p className="text-sm text-gray-600">Incorrect</p>
+                  <p className="text-xl sm:text-2xl font-bold text-red-600">{wrongCount}</p>
+                  <p className="text-xs sm:text-sm text-gray-600">Incorrect</p>
                 </div>
                 <div className="text-center">
-                  <p className="text-2xl font-bold" style={{ color: '#FF9800' }}>{skippedCount}</p>
-                  <p className="text-sm text-gray-600">Skipped</p>
+                  <p className="text-xl sm:text-2xl font-bold" style={{ color: '#FF9800' }}>{skippedCount}</p>
+                  <p className="text-xs sm:text-sm text-gray-600">Skipped</p>
                 </div>
               </div>
             </div>
           </div>
 
           {/* Detailed Results */}
-          <div className="bg-white rounded-2xl p-6 shadow-lg">
-            <h3 className="text-xl font-bold text-gray-800 mb-4">Detailed Results</h3>
+          <div className="bg-white rounded-2xl p-4 sm:p-6 shadow-lg">
+            <h3 className="text-lg sm:text-xl font-bold text-gray-800 mb-3 sm:mb-4">Detailed Results</h3>
             {questions.map((q, index) => {
               const userAnswer = answers[index] || "";
               const correctOptionRaw = q.correct_option || "";
@@ -257,10 +283,10 @@ const Quiz = ({ commissionerId: commissionerIdProp }) => {
                 : "";
 
               return (
-                <div key={index} className="border-b border-gray-200 py-4 last:border-b-0">
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1">
-                      <p className="font-semibold text-gray-800 mb-2">
+                <div key={index} className="border-b border-gray-200 py-3 sm:py-4 last:border-b-0">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm sm:text-base font-semibold text-gray-800 mb-2 leading-relaxed">
                         {index + 1}. {q.question}
                       </p>
                       {isSkipped ? (
@@ -317,17 +343,17 @@ const Quiz = ({ commissionerId: commissionerIdProp }) => {
   const progress = ((current + 1) / questions.length) * 100;
 
   return (
-    <div className="min-h-screen p-6" style={{ backgroundColor: '#E8F5E9' }}>
+    <div className="min-h-screen p-3 sm:p-4 md:p-6" style={{ backgroundColor: '#E8F5E9' }}>
       <div className="max-w-4xl mx-auto">
         {/* Header Card */}
-        <div className="bg-white rounded-2xl p-4 mb-4 shadow-lg">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <div className="w-10 h-10 rounded-full relative overflow-hidden">
+        <div className="bg-white rounded-2xl p-3 sm:p-4 mb-4 shadow-lg">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4">
+            <div className="flex items-center gap-2 sm:gap-4 w-full sm:w-auto">
+              <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full relative overflow-hidden flex-shrink-0">
                 <div className="absolute top-0 left-0 right-0 h-1/2" style={{ backgroundColor: '#64B5F6' }}></div>
                 <div className="absolute bottom-0 left-0 right-0 h-1/2" style={{ backgroundColor: '#66BB6A' }}></div>
                 <div className="absolute inset-0 flex items-center justify-center">
-                  <div className="flex items-end justify-center gap-0.5 h-5">
+                  <div className="flex items-end justify-center gap-0.5 h-4 sm:h-5">
                     <div className="w-1 bg-blue-700 h-2"></div>
                     <div className="w-1 bg-blue-700 h-4"></div>
                     <div className="w-1 bg-blue-700 h-3"></div>
@@ -335,12 +361,12 @@ const Quiz = ({ commissionerId: commissionerIdProp }) => {
                   </div>
                 </div>
               </div>
-              <div>
-                <p className="text-xs uppercase tracking-wide text-gray-600">MUNICIPAL</p>
-                <h1 className="text-xl font-bold text-gray-800">Assessment</h1>
+              <div className="flex-1 min-w-0">
+                <p className="text-[10px] sm:text-xs uppercase tracking-wide text-gray-600">MUNICIPAL</p>
+                <h1 className="text-lg sm:text-xl font-bold text-gray-800 truncate">Assessment</h1>
               </div>
             </div>
-            <div className="flex-1 mx-6">
+            <div className="w-full sm:flex-1 sm:mx-4 order-3 sm:order-2">
               <div className="w-full bg-gray-200 rounded-full h-2">
                 <div
                   className="h-2 rounded-full transition-all"
@@ -348,51 +374,51 @@ const Quiz = ({ commissionerId: commissionerIdProp }) => {
                 ></div>
               </div>
             </div>
-            <div className="flex items-center gap-4">
-              <div className="text-right">
-                <p className="text-sm text-gray-600">Question {current + 1} of {questions.length}</p>
-                <p className="text-2xl font-bold" style={{ color: '#66BB6A' }}>{timeLeft}s</p>
+            <div className="flex items-center justify-between sm:justify-end gap-2 sm:gap-4 w-full sm:w-auto order-2 sm:order-3">
+              <div className="text-left sm:text-right">
+                <p className="text-xs sm:text-sm text-gray-600">Q {current + 1}/{questions.length}</p>
+                <p className="text-xl sm:text-2xl font-bold" style={{ color: '#66BB6A' }}>{timeLeft}s</p>
               </div>
               <button
                 onClick={handleLogout}
-                className="px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-semibold hover:bg-red-700 transition-colors flex items-center gap-2"
+                className="px-3 sm:px-4 py-2 bg-red-600 text-white rounded-lg text-xs sm:text-sm font-semibold hover:bg-red-700 transition-colors flex items-center gap-1 sm:gap-2 flex-shrink-0"
               >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-3 h-3 sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
                 </svg>
-                Logout
+                <span className="hidden xs:inline">Logout</span>
               </button>
             </div>
           </div>
         </div>
 
         {/* Question Card */}
-        <div className="bg-white rounded-2xl p-8 shadow-lg">
-          <h2 className="text-xl font-bold text-gray-800 mb-6">{q.question}</h2>
+        <div className="bg-white rounded-2xl p-4 sm:p-6 md:p-8 shadow-lg">
+          <h2 className="text-base sm:text-lg md:text-xl font-bold text-gray-800 mb-4 sm:mb-6 leading-tight">{q.question}</h2>
 
-          <div className="space-y-3 mb-6">
+          <div className="space-y-2 sm:space-y-3 mb-4 sm:mb-6">
             {["A", "B", "C", "D"].map((opt) => {
               const selected = answers[current] === opt;
 
               return (
                 <label
                   key={opt}
-                  className={`flex items-center p-4 border-2 rounded-lg cursor-pointer transition-all ${
+                  className={`flex items-start sm:items-center p-3 sm:p-4 border-2 rounded-lg cursor-pointer transition-all ${
                     selected 
                       ? "border-green-500 bg-green-50" 
                       : "border-gray-200 hover:border-gray-300"
                   }`}
                 >
                   <div
-                    className={`w-8 h-8 rounded-full flex items-center justify-center mr-4 font-semibold ${
+                    className={`w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center mr-3 sm:mr-4 font-semibold flex-shrink-0 mt-0.5 sm:mt-0 ${
                       selected 
                         ? "bg-green-500 text-white" 
                         : "bg-gray-200 text-gray-700"
                     }`}
                   >
-                    {opt}
+                    <span className="text-sm sm:text-base">{opt}</span>
                   </div>
-                  <span className="text-gray-800 flex-1">{q[`option_${opt.toLowerCase()}`]}</span>
+                  <span className="text-sm sm:text-base text-gray-800 flex-1 leading-relaxed">{q[`option_${opt.toLowerCase()}`]}</span>
                   <input
                     type="radio"
                     name={`question-${current}`}
@@ -405,11 +431,11 @@ const Quiz = ({ commissionerId: commissionerIdProp }) => {
             })}
           </div>
 
-          <div className="flex justify-center items-center gap-4">
+          <div className="flex flex-col sm:flex-row justify-center items-stretch sm:items-center gap-3 sm:gap-4">
             {answers[current] && (
               <button
                 onClick={submitCurrent}
-                className="px-6 py-3 rounded-lg font-semibold text-white hover:opacity-90 transition-opacity"
+                className="w-full sm:w-auto px-6 py-3 rounded-lg font-semibold text-white hover:opacity-90 transition-opacity text-sm sm:text-base"
                 style={{ backgroundColor: '#4DB6AC' }}
               >
                 Submit Answer
@@ -417,7 +443,7 @@ const Quiz = ({ commissionerId: commissionerIdProp }) => {
             )}
             <button
               onClick={moveNext}
-              className="px-6 py-3 bg-gray-600 text-white rounded-lg font-semibold hover:bg-gray-700 transition-colors"
+              className="w-full sm:w-auto px-6 py-3 bg-gray-600 text-white rounded-lg font-semibold hover:bg-gray-700 transition-colors text-sm sm:text-base"
             >
               Skip Question
             </button>

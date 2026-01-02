@@ -89,8 +89,8 @@ const Login = () => {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: '#E8F5E9' }}>
-      <div className="bg-white p-8 rounded-2xl shadow-lg w-full max-w-md">
+    <div className="min-h-screen flex items-center justify-center p-4 sm:p-6" style={{ backgroundColor: '#E8F5E9' }}>
+      <div className="bg-white p-6 sm:p-8 rounded-2xl shadow-lg w-full max-w-md">
         {/* Logo and Title Section */}
         <div className="flex flex-col items-center mb-6">
           {/* Logo */}
@@ -107,9 +107,9 @@ const Login = () => {
             </div>
           </div>
           
-          <p className="text-xs uppercase tracking-wide text-gray-600 mb-1">Commissioner & Director of Municipal Administration</p>
-          <h1 className="text-3xl font-bold text-gray-800 mb-1">Municipal Commissioner</h1>
-          <p className="text-base text-gray-600">Commissioner Assessment Portal</p>
+          <p className="text-[10px] sm:text-xs uppercase tracking-wide text-gray-600 mb-1 text-center">Commissioner & Director of Municipal Administration</p>
+          <h1 className="text-2xl sm:text-3xl font-bold text-gray-800 mb-1 text-center">Municipal Commissioner</h1>
+          <p className="text-sm sm:text-base text-gray-600 text-center">Commissioner Assessment Portal</p>
         </div>
 
         {/* Login Form */}

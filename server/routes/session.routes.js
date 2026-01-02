@@ -6,6 +6,7 @@ import {
 import { addSession } from "../controllers/session.controller.js";
 import { authenticate } from "../middleware/auth.middleware.js";
 import { authorizeRole } from "../middleware/role.middleware.js";
+import { cloneSession } from "../controllers/session.controller.js";
 
 const router = express.Router();
 
@@ -22,6 +23,12 @@ router.put(
   authenticate,
   authorizeRole("admin"),
   activateSession
+);
+router.post(
+  "/clone",
+  authenticate,
+  authorizeRole("admin"),
+  cloneSession
 );
 
 

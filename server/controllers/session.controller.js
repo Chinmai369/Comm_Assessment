@@ -3,6 +3,7 @@ import {
   activateSessionById,
 } from "../models/session.model.js";
 import { createSession } from "../models/session.model.js";
+import { cloneSessionWithQuestions } from "../models/session.model.js";
 
 export const addSession = async (req, res) => {
   try {
@@ -65,3 +66,54 @@ export const activateSession = async (req, res) => {
   }
 };
 
+export const cloneSession = async (req, res) => {
+  try {
+    const { new_session_name, source_session_ids, question_count } = req.body;
+
+    // 🔒 Basic validations
+    if (!new_session_name || !new_session_name.trim()) {
+      return res.status(400).json({
+        success: false,
+        message: "New session name is required"
+      });
+    }
+
+    if (
+      !Array.isArray(source_session_ids) ||
+      source_session_ids.length === 0
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "At least one source session must be selected"
+      });
+    }
+
+    if (!question_count || question_count <= 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Valid question_count is required"
+      });
+    }
+
+    // 🔁 Call model
+    const result = await cloneSessionWithQuestions(
+      new_session_name.trim(),
+      source_session_ids,
+      question_count
+    );
+
+    return res.json({
+      success: true,
+      message: "Session created successfully from existing sessions",
+      session_id: result.session_id,
+      questions_added: result.questions_added
+    });
+  } catch (error) {
+    console.error("CLONE SESSION ERROR:", error.message);
+
+    return res.status(500).json({
+      success: false,
+      message: error.message || "Failed to create session from existing"
+    });
+  }
+};
