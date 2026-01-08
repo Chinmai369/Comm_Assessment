@@ -381,6 +381,15 @@ const AdminDashboard = ({ onHome }) => {
     fetchSessions();
   }, [activeTab, session?.id]);
 
+  // Auto refresh every 5 seconds
+  useEffect(() => {
+    const interval = setInterval(() => {
+      handleRefresh();
+    }, 5000);
+
+    return () => clearInterval(interval);
+  }, [activeTab, session?.id]); // Re-run if these change to ensure current state is used
+
   const handleRefresh = () => {
     fetchData();
     if (activeTab === "analysis") {

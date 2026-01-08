@@ -32,29 +32,26 @@ const Login = () => {
       return;
     }
 
-    if (!userCode.trim()) {
-      setError('Please enter User ID');
-      setLoading(false);
-      return;
-    }
+    // Prepare request body based on role
+    const requestBody = { role };
 
-    if (role === 'commissioner' && !ulbName) {
-      setError('Please select ULB');
-      setLoading(false);
-      return;
+    if (role === 'commissioner') {
+      if (!ulbName) {
+        setError('Please select ULB');
+        setLoading(false);
+        return;
+      }
+      requestBody.ulb_name = ulbName;
+    } else if (role === 'admin' || role === 'engineer') {
+      if (!userCode.trim()) {
+        setError('Please enter User ID');
+        setLoading(false);
+        return;
+      }
+      requestBody.user_code = userCode.trim();
     }
 
     try {
-      // Prepare request body based on role
-      const requestBody = {
-        role,
-        user_code: userCode.trim(),
-      };
-
-      if (role === 'commissioner') {
-        requestBody.ulb_name = ulbName;
-      }
-
       // Call login API
       const response = await apiPost('/auth/login', requestBody);
 
@@ -132,23 +129,25 @@ const Login = () => {
             </select>
           </div>
 
-          {/* User ID Input */}
-          <div className="mb-4">
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              User ID <span className="text-red-500">*</span>
-            </label>
-            <input
-              type="text"
-              placeholder="Enter your User ID"
-              value={userCode}
-              onChange={(e) => {
-                setUserCode(e.target.value);
-                setError('');
-              }}
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-400"
-              required
-            />
-          </div>
+          {/* User ID Input - Hidden for commissioner, shown for admin/engineer */}
+          {role !== 'commissioner' && (
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                User ID <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="text"
+                placeholder="Enter your User ID"
+                value={userCode}
+                onChange={(e) => {
+                  setUserCode(e.target.value);
+                  setError('');
+                }}
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-400"
+                required={role !== 'commissioner'}
+              />
+            </div>
+          )}
 
           {/* ULB Dropdown - Only visible for commissioner */}
           {role === 'commissioner' && (

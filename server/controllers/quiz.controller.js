@@ -54,7 +54,8 @@ export const fetchQuestions = async (req, res) => {
 
 export const submitQuiz = async (req, res) => {
   try {
-    const { answers = [] } = req.body;
+    const { answers = [], time_spent = [] } = req.body;
+
 
     console.log("SUBMIT QUIZ HIT");
 console.log("USER:", req.user);
@@ -85,25 +86,25 @@ console.log("ANSWERS:", answers);
 
     let correct = 0;
     let wrong = 0;
-
     for (let i = 0; i < questions.length; i++) {
       const selectedOption = answers[i] || null;
       const question = questions[i];
-
+      const duration = time_spent[i] ?? null;
+    
       const isCorrect =
         selectedOption &&
         selectedOption === question.correct_option;
-
+    
       if (selectedOption) {
         if (isCorrect) correct++;
         else wrong++;
       }
-
+    
       await pool.query(
         `
         INSERT INTO comm_answers
-          (user_code, role, session_id, question_id, selected_option, is_correct)
-        VALUES ($1,$2,$3,$4,$5,$6)
+          (user_code, role, session_id, question_id, selected_option, is_correct, time_spent)
+        VALUES ($1,$2,$3,$4,$5,$6,$7)
         ON CONFLICT (user_code, session_id, question_id)
         DO NOTHING
         `,
@@ -114,9 +115,44 @@ console.log("ANSWERS:", answers);
           question.id,
           selectedOption,
           isCorrect,
+          duration
         ]
       );
     }
+    for (let i = 0; i < questions.length; i++) {
+      const selectedOption = answers[i] || null;
+      const question = questions[i];
+      const duration = time_spent[i] ?? null;
+    
+      const isCorrect =
+        selectedOption &&
+        selectedOption === question.correct_option;
+    
+      if (selectedOption) {
+        if (isCorrect) correct++;
+        else wrong++;
+      }
+    
+      await pool.query(
+        `
+        INSERT INTO comm_answers
+          (user_code, role, session_id, question_id, selected_option, is_correct, time_spent)
+        VALUES ($1,$2,$3,$4,$5,$6,$7)
+        ON CONFLICT (user_code, session_id, question_id)
+        DO NOTHING
+        `,
+        [
+          req.user.user_code,
+          req.user.role,
+          activeSession.id,
+          question.id,
+          selectedOption,
+          isCorrect,
+          duration
+        ]
+      );
+    }
+        
 
     const percentage = Math.round(
       (correct / questions.length) * 100

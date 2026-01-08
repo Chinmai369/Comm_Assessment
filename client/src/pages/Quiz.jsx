@@ -21,8 +21,7 @@ const Quiz = ({ commissionerId: commissionerIdProp }) => {
   const [showAnswer, setShowAnswer] = useState(false);
   const [expandedQuestions, setExpandedQuestions] = useState({});
   const [questionStartTime, setQuestionStartTime] = useState(Date.now());
-const [timeSpent, setTimeSpent] = useState([]);
-
+  const [timeSpent, setTimeSpent] = useState([]);
 
   // Function to shuffle array (Fisher-Yates algorithm)
   const shuffleArray = (array) => {
@@ -37,18 +36,25 @@ const [timeSpent, setTimeSpent] = useState([]);
   useEffect(() => {
     apiGet("/quiz/questions")
       .then((data) => {
-        // Store original questions in ID order
+        // original order (used for backend submission)
         setOriginalQuestions(data.questions);
-        // Shuffle questions for display
+  
+        // shuffled for display
         const shuffledQuestions = shuffleArray(data.questions);
         setQuestions(shuffledQuestions);
+  
+        // answers array
         setAnswers(new Array(shuffledQuestions.length).fill(""));
+  
+        // time spent per question array
+        setTimeSpent(new Array(shuffledQuestions.length).fill(null));
       })
       .catch((err) => {
-        setError("Failed to load questions. Please try again.");
-        console.error("Error fetching questions:", err);
+        setError("Failed to load questions");
+        console.error(err);
       });
   }, []);
+  
 
   // ⏱️ TIMER
   useEffect(() => {
